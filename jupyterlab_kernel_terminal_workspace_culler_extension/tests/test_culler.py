@@ -45,19 +45,19 @@ class TestDefaultSettings:
         """Verify default kernel culling settings."""
         settings = culler.get_settings()
         assert settings["kernelCullEnabled"] is True
-        assert settings["kernelCullIdleTimeout"] == 60
+        assert settings["kernelCullIdleTimeout"] == 60  # 1 hour
 
     def test_default_terminal_settings(self, culler):
         """Verify default terminal culling settings."""
         settings = culler.get_settings()
         assert settings["terminalCullEnabled"] is True
-        assert settings["terminalCullIdleTimeout"] == 30
+        assert settings["terminalCullIdleTimeout"] == 60  # 1 hour
 
     def test_default_session_settings(self, culler):
         """Verify default session culling settings."""
         settings = culler.get_settings()
         assert settings["sessionCullEnabled"] is False
-        assert settings["sessionCullIdleTimeout"] == 120
+        assert settings["sessionCullIdleTimeout"] == 10080  # 7 days
 
     def test_default_check_interval(self, culler):
         """Verify default check interval."""

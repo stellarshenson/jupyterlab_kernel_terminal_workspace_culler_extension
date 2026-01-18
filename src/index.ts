@@ -65,7 +65,7 @@ async function pollCullResults(app: JupyterFrontEnd): Promise<void> {
       // Try to use jupyterlab-notifications-extension if available
       if (app.commands.hasCommand('jupyterlab-notifications:send')) {
         await app.commands.execute('jupyterlab-notifications:send', {
-          message: lines.join('<br>'),
+          message: lines.join('\n'),
           type: 'info',
           autoClose: 5000
         });

@@ -1,58 +1,26 @@
-name: "Step 2: Publish Release"
+name: Publish Release
+
 on:
   workflow_dispatch:
     inputs:
-      branch:
-        description: "The target branch"
-        required: false
       release_url:
-        description: "The URL of the draft GitHub release"
-        required: false
-      steps_to_skip:
-        description: "Comma separated list of steps to skip"
-        required: false
+        description: 'Release URL to publish'
+        required: true
 
 jobs:
   publish_release:
     runs-on: ubuntu-latest
-    environment: release
     permissions:
       id-token: write
     steps:
-      - uses: jupyterlab/maintainer-tools/.github/actions/base-setup@v1
-
-      - uses: actions/create-github-app-token@v1
-        id: app-token
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Base Setup
+        uses: jupyterlab/maintainer-tools/.github/actions/base-setup@v1
+      - name: Publish Release
+        uses: jupyter-server/jupyter_releaser/.github/actions/publish-release@v2
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Populate Release
-        id: populate-release
-        uses: jupyter-server/jupyter_releaser/.github/actions/populate-release@v2
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          branch: ${{ github.event.inputs.branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           release_url: ${{ github.event.inputs.release_url }}
-          steps_to_skip: ${{ github.event.inputs.steps_to_skip }}
-
-      - name: Finalize Release
-        id: finalize-release
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        uses: jupyter-server/jupyter_releaser/.github/actions/finalize-release@v2
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          release_url: ${{ steps.populate-release.outputs.release_url }}
-
-      - name: "** Next Step **"
-        if: ${{ success() }}
-        run: |
-          echo "Verify the final release"
-          echo ${{ steps.finalize-release.outputs.release_url }}
-
-      - name: "** Failure Message **"
-        if: ${{ failure() }}
-        run: |
-          echo "Failed to Publish the Draft Release Url:"
-          echo ${{ steps.populate-release.outputs.release_url }}

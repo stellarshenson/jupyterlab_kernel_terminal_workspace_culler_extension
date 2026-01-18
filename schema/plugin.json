@@ -12,6 +12,7 @@
     "kernelCullIdleTimeout": {
       "type": "integer",
       "title": "Kernel Idle Timeout (minutes)",
+      "description": "Default: 1 hour (60 minutes)",
       "default": 60,
       "minimum": 1
     },
@@ -23,7 +24,8 @@
     "terminalCullIdleTimeout": {
       "type": "integer",
       "title": "Terminal Idle Timeout (minutes)",
-      "default": 30,
+      "description": "Default: 1 hour (60 minutes)",
+      "default": 60,
       "minimum": 1
     },
     "sessionCullEnabled": {
@@ -34,7 +36,8 @@
     "sessionCullIdleTimeout": {
       "type": "integer",
       "title": "Session Idle Timeout (minutes)",
-      "default": 120,
+      "description": "Default: 7 days (10080 minutes)",
+      "default": 10080,
       "minimum": 1
     },
     "cullCheckInterval": {

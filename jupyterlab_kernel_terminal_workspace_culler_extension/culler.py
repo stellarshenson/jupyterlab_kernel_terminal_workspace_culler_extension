@@ -18,11 +18,11 @@ class ResourceCuller:
 
         # Default settings
         self._kernel_cull_enabled = True
-        self._kernel_cull_idle_timeout = 60  # minutes
+        self._kernel_cull_idle_timeout = 60  # minutes (1 hour)
         self._terminal_cull_enabled = True
-        self._terminal_cull_idle_timeout = 30  # minutes
+        self._terminal_cull_idle_timeout = 60  # minutes (1 hour)
         self._session_cull_enabled = False
-        self._session_cull_idle_timeout = 120  # minutes
+        self._session_cull_idle_timeout = 10080  # minutes (7 days)
         self._cull_check_interval = 5  # minutes
 
         # Last culling result for notification polling
@@ -41,7 +41,10 @@ class ResourceCuller:
     @property
     def terminal_manager(self) -> Any:
         """Access the terminal manager from jupyter_server."""
-        return self._server_app.terminal_manager
+        # Terminal manager may be on server_app or in web_app settings
+        if hasattr(self._server_app, "terminal_manager"):
+            return self._server_app.terminal_manager
+        return self._server_app.web_app.settings.get("terminal_manager")
 
     @property
     def session_manager(self) -> Any:
@@ -205,8 +208,13 @@ class ResourceCuller:
         now = datetime.now(timezone.utc)
         timeout_seconds = self._terminal_cull_idle_timeout * 60
 
+        terminal_mgr = self.terminal_manager
+        if terminal_mgr is None:
+            logger.warning("[Culler] Terminal manager not available")
+            return culled
+
         try:
-            terminals = self.terminal_manager.list()
+            terminals = terminal_mgr.list()
         except Exception as e:
             logger.error(f"[Culler] Failed to list terminals: {e}")
             return culled
@@ -239,7 +247,7 @@ class ResourceCuller:
                         f"[Culler] CULLING TERMINAL {name} - idle {idle_minutes:.1f} minutes "
                         f"(threshold: {self._terminal_cull_idle_timeout})"
                     )
-                    await self.terminal_manager.terminate(name)
+                    await terminal_mgr.terminate(name)
                     logger.info(f"[Culler] Terminal {name} culled successfully")
                     culled.append(name)
 
