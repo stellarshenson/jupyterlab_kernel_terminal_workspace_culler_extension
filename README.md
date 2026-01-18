@@ -16,7 +16,7 @@ Automatically cull idle kernels, terminals, and sessions after configurable time
 - **Idle terminal culling** - Close terminals with no WebSocket activity beyond timeout
 - **Session culling** - Remove stale sessions based on associated kernel activity
 - **Configurable timeouts** - All timeouts adjustable via JupyterLab Settings
-- **Notifications** - Optional toast notifications when resources are culled (requires [jupyterlab-notifications](https://github.com/mwouts/jupyterlab-notifications))
+- **Notifications** - Optional toast notifications when resources are culled (requires `jupyterlab-notifications`)
 - **Server-side detection** - Uses tornado PeriodicCallback for accurate activity tracking
 
 ## Default Settings
@@ -100,7 +100,7 @@ Go to `Settings` -> `Settings Editor` -> `Resource Culler` and uncheck "Enable K
 
 **Q: Can I see when resources were culled?**
 
-Yes. Run JupyterLab with `--log-level=INFO` to see `[Culler]` log messages. If you have [jupyterlab-notifications](https://github.com/mwouts/jupyterlab-notifications) installed, you'll also see toast notifications.
+Yes. Run JupyterLab with `--log-level=INFO` to see `[Culler]` log messages. If you have `jupyterlab-notifications` installed, you'll also see toast notifications.
 
 ## Uninstall
 
