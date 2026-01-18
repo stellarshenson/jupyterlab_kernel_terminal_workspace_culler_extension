@@ -23,9 +23,13 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "jupyter_server>=2.4.0,<3"
+    "jupyter_server>=2.4.0,<3",
+    "requests>=2.20.0",
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
+
+[project.scripts]
+jupyterlab_kernel_terminal_workspace_culler = "jupyterlab_kernel_terminal_workspace_culler_extension.cli:main"
 
 [project.optional-dependencies]
 dev = [

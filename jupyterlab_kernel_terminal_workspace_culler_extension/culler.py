@@ -134,6 +134,24 @@ class ResourceCuller:
         self._result_consumed = True
         return self._last_cull_result
 
+    def get_terminals_connection_status(self) -> dict[str, bool]:
+        """Return connection status for all terminals."""
+        result: dict[str, bool] = {}
+        terminal_mgr = self.terminal_manager
+        if terminal_mgr is None:
+            return result
+
+        try:
+            terminals = terminal_mgr.list()
+            for terminal in terminals:
+                name = terminal.get("name")
+                if name:
+                    result[name] = self._terminal_has_connected_clients(terminal_mgr, name)
+        except Exception:
+            pass
+
+        return result
+
     async def _cull_idle_resources(self) -> None:
         """Main culling routine called by periodic callback."""
         kernels_culled: list[str] = []

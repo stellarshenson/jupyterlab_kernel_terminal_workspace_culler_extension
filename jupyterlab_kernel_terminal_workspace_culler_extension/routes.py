@@ -83,6 +83,19 @@ class CullResultHandler(APIHandler):
         self.finish(json.dumps(_culler.get_last_cull_result()))
 
 
+class TerminalsConnectionHandler(APIHandler):
+    """Handler for returning terminal connection status."""
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        """Return connection status for all terminals."""
+        if _culler is None:
+            self.finish(json.dumps({}))
+            return
+
+        self.finish(json.dumps(_culler.get_terminals_connection_status()))
+
+
 def setup_route_handlers(web_app: tornado.web.Application) -> None:
     """Set up route handlers for the extension."""
     host_pattern = ".*$"
@@ -93,6 +106,7 @@ def setup_route_handlers(web_app: tornado.web.Application) -> None:
         (url_path_join(base_url, namespace, "settings"), SettingsHandler),
         (url_path_join(base_url, namespace, "status"), StatusHandler),
         (url_path_join(base_url, namespace, "cull-result"), CullResultHandler),
+        (url_path_join(base_url, namespace, "terminals-connection"), TerminalsConnectionHandler),
     ]
 
     web_app.add_handlers(host_pattern, handlers)

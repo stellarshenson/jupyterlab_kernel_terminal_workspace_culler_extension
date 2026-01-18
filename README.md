@@ -103,6 +103,34 @@ Go to `Settings` -> `Settings Editor` -> `Resource Culler` and uncheck "Enable K
 
 Yes. Run JupyterLab with `--log-level=INFO` to see `[Culler]` log messages. If you have `jupyterlab-notifications` installed, you'll also see toast notifications.
 
+## CLI
+
+The extension includes a command-line tool for listing and culling resources from the terminal.
+
+```bash
+# Show help
+jupyterlab_kernel_terminal_workspace_culler
+
+# List all resources and their idle times
+jupyterlab_kernel_terminal_workspace_culler list
+
+# List as JSON
+jupyterlab_kernel_terminal_workspace_culler list --json
+
+# Show what would be culled (dry run)
+jupyterlab_kernel_terminal_workspace_culler cull --dry-run
+
+# Cull idle resources
+jupyterlab_kernel_terminal_workspace_culler cull
+
+# Custom timeouts
+jupyterlab_kernel_terminal_workspace_culler cull --kernel-timeout 30 --terminal-timeout 120
+```
+
+The CLI auto-discovers running Jupyter servers. You can also set environment variables:
+- `JUPYTER_SERVER_URL` - server URL (e.g., `http://localhost:8888/`)
+- `JUPYTER_TOKEN` - authentication token
+
 ## Uninstall
 
 ```bash
