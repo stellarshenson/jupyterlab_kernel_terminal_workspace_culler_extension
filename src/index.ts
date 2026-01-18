@@ -135,15 +135,15 @@ async function pollCullResults(app: JupyterFrontEnd): Promise<void> {
  * This enables the backend to distinguish between terminals with open tabs
  * and terminals whose tabs have been closed (for disconnected-only culling).
  */
-async function reportActiveTerminals(
-  tracker: ITerminalTracker
-): Promise<void> {
+async function reportActiveTerminals(tracker: ITerminalTracker): Promise<void> {
   const activeTerminals: string[] = [];
 
   tracker.forEach(widget => {
     // widget.content is the Terminal, widget.content.session.name is the terminal name
+    // Check isAttached (has open tab) and !isDisposed, but NOT isVisible
+    // isVisible is false when tab exists but another tab is selected
     const name = widget.content.session?.name;
-    if (name && widget.isVisible && widget.isAttached && !widget.isDisposed) {
+    if (name && widget.isAttached && !widget.isDisposed) {
       activeTerminals.push(name);
     }
   });

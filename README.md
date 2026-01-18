@@ -21,14 +21,14 @@ Automatically cull idle kernels, terminals, and sessions after configurable time
 
 ## Default Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Kernel timeout | 60 min (1 hour) | Idle kernels culled after this period |
-| Terminal timeout | 60 min (1 hour) | Inactive terminals culled after this period |
-| Disconnected only | enabled | Only cull terminals with no open browser tab |
-| Session timeout | 10080 min (7 days) | Idle sessions culled after this period |
-| Check interval | 5 min | How often the culler checks for idle resources |
-| Notifications | enabled | Show notification when resources are culled |
+| Setting           | Default            | Description                                    |
+| ----------------- | ------------------ | ---------------------------------------------- |
+| Kernel timeout    | 60 min (1 hour)    | Idle kernels culled after this period          |
+| Terminal timeout  | 60 min (1 hour)    | Inactive terminals culled after this period    |
+| Disconnected only | enabled            | Only cull terminals with no open browser tab   |
+| Session timeout   | 10080 min (7 days) | Idle sessions culled after this period         |
+| Check interval    | 5 min              | How often the culler checks for idle resources |
+| Notifications     | enabled            | Show notification when resources are culled    |
 
 ## How Idle Detection Works
 
@@ -70,6 +70,7 @@ Run JupyterLab with `--log-level=INFO` to see culling activity.
 **Q: My long-running calculation was killed. How do I prevent this?**
 
 Two options:
+
 1. **Increase timeout**: Go to `Settings` -> `Settings Editor` -> `Resource Culler` and increase the kernel/terminal timeout
 2. **Use a terminal multiplexer**: Run calculations inside `screen` or `tmux` - these survive terminal culling
 
@@ -128,6 +129,7 @@ jupyterlab_kernel_terminal_workspace_culler cull --kernel-timeout 30 --terminal-
 ```
 
 The CLI auto-discovers running Jupyter servers. You can also set environment variables:
+
 - `JUPYTER_SERVER_URL` - server URL (e.g., `http://localhost:8888/`)
 - `JUPYTER_TOKEN` - authentication token
 

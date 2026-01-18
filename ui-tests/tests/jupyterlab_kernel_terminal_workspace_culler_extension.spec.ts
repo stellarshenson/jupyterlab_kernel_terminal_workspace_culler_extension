@@ -16,6 +16,10 @@ test('should emit an activation console message', async ({ page }) => {
   await page.goto();
 
   expect(
-    logs.filter(s => s === 'JupyterLab extension jupyterlab_kernel_terminal_workspace_culler_extension is activated!')
+    logs.filter(
+      s =>
+        s ===
+        'JupyterLab extension jupyterlab_kernel_terminal_workspace_culler_extension is activated!'
+    )
   ).toHaveLength(1);
 });

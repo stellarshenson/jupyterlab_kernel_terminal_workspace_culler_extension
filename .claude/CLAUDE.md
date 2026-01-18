@@ -25,11 +25,13 @@ The following workspace rules are STRICTLY ENFORCED for this project:
 JupyterLab extension to automatically cull idle kernels, terminals, and workspaces after configurable timeout periods. This helps manage system resources by cleaning up unused sessions.
 
 **Technology Stack**:
+
 - TypeScript frontend extension for JupyterLab 4.x
 - Python server extension using jupyter_server
 - Settings managed via JupyterLab settingregistry
 
 **Package Names**:
+
 - npm: `jupyterlab_kernel_terminal_workspace_culler_extension`
 - PyPI: `jupyterlab-kernel-terminal-workspace-culler-extension`
 
