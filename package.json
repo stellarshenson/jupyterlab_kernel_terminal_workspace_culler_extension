@@ -1,6 +1,6 @@
 {
     "name": "jupyterlab_kernel_terminal_workspace_culler_extension",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Jupyterlab extension to kill unused kernels, terminals and workspaces. User can configure the idle time (minutes) after which the resource will be released automatically. This helps with the locked memory, insane number of terminals opened etc.",
     "keywords": [
         "jupyter",
@@ -79,7 +79,7 @@
         "mkdirp": "^1.0.3",
         "npm-run-all2": "^7.0.1",
         "prettier": "^3.0.0",
-        "rimraf": "^5.0.1",
+        "rimraf": "^5.0.10",
         "source-map-loader": "^1.0.2",
         "style-loader": "^3.3.1",
         "stylelint": "^15.10.1",

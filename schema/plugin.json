@@ -1,8 +1,54 @@
 {
   "jupyter.lab.shortcuts": [],
-  "title": "jupyterlab_kernel_terminal_workspace_culler_extension",
-  "description": "jupyterlab_kernel_terminal_workspace_culler_extension settings.",
+  "title": "Resource Culler",
+  "description": "Automatic culling of idle kernels, terminals, and sessions",
   "type": "object",
-  "properties": {},
+  "properties": {
+    "kernelCullEnabled": {
+      "type": "boolean",
+      "title": "Enable Kernel Culling",
+      "default": true
+    },
+    "kernelCullIdleTimeout": {
+      "type": "integer",
+      "title": "Kernel Idle Timeout (minutes)",
+      "default": 60,
+      "minimum": 1
+    },
+    "terminalCullEnabled": {
+      "type": "boolean",
+      "title": "Enable Terminal Culling",
+      "default": true
+    },
+    "terminalCullIdleTimeout": {
+      "type": "integer",
+      "title": "Terminal Idle Timeout (minutes)",
+      "default": 30,
+      "minimum": 1
+    },
+    "sessionCullEnabled": {
+      "type": "boolean",
+      "title": "Enable Session Culling",
+      "default": false
+    },
+    "sessionCullIdleTimeout": {
+      "type": "integer",
+      "title": "Session Idle Timeout (minutes)",
+      "default": 120,
+      "minimum": 1
+    },
+    "cullCheckInterval": {
+      "type": "integer",
+      "title": "Check Interval (minutes)",
+      "default": 5,
+      "minimum": 1
+    },
+    "showNotifications": {
+      "type": "boolean",
+      "title": "Show Notifications",
+      "description": "Display summary notification when resources are culled",
+      "default": true
+    }
+  },
   "additionalProperties": false
 }
