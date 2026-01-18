@@ -96,6 +96,29 @@ class TerminalsConnectionHandler(APIHandler):
         self.finish(json.dumps(_culler.get_terminals_connection_status()))
 
 
+class ActiveTerminalsHandler(APIHandler):
+    """Handler for receiving active terminal list from frontend."""
+
+    @tornado.web.authenticated
+    def post(self) -> None:
+        """Update active terminals list."""
+        if _culler is None:
+            self.set_status(503)
+            self.finish(json.dumps({"error": "Culler not initialized"}))
+            return
+        try:
+            data = json.loads(self.request.body)
+            terminals = data.get("terminals", [])
+            _culler.set_active_terminals(terminals)
+            self.finish(json.dumps({"status": "ok"}))
+        except json.JSONDecodeError:
+            self.set_status(400)
+            self.finish(json.dumps({"error": "Invalid JSON"}))
+        except Exception as e:
+            self.set_status(500)
+            self.finish(json.dumps({"error": str(e)}))
+
+
 def setup_route_handlers(web_app: tornado.web.Application) -> None:
     """Set up route handlers for the extension."""
     host_pattern = ".*$"
@@ -107,6 +130,7 @@ def setup_route_handlers(web_app: tornado.web.Application) -> None:
         (url_path_join(base_url, namespace, "status"), StatusHandler),
         (url_path_join(base_url, namespace, "cull-result"), CullResultHandler),
         (url_path_join(base_url, namespace, "terminals-connection"), TerminalsConnectionHandler),
+        (url_path_join(base_url, namespace, "active-terminals"), ActiveTerminalsHandler),
     ]
 
     web_app.add_handlers(host_pattern, handlers)

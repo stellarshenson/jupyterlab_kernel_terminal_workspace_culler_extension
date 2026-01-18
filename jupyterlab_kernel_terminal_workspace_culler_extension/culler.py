@@ -34,6 +34,9 @@ class ResourceCuller:
         }
         self._result_consumed = True  # Track if frontend has fetched the result
 
+        # Active terminals reported by frontend (terminals with open tabs)
+        self._active_terminals: set[str] = set()
+
     @property
     def kernel_manager(self) -> Any:
         """Access the kernel manager from jupyter_server."""
@@ -135,7 +138,7 @@ class ResourceCuller:
         return self._last_cull_result
 
     def get_terminals_connection_status(self) -> dict[str, bool]:
-        """Return connection status for all terminals."""
+        """Return connection status (has active tab) for all terminals."""
         result: dict[str, bool] = {}
         terminal_mgr = self.terminal_manager
         if terminal_mgr is None:
@@ -146,11 +149,20 @@ class ResourceCuller:
             for terminal in terminals:
                 name = terminal.get("name")
                 if name:
-                    result[name] = self._terminal_has_connected_clients(terminal_mgr, name)
+                    result[name] = self._terminal_has_active_tab(name)
         except Exception:
             pass
 
         return result
+
+    def set_active_terminals(self, terminals: list[str]) -> None:
+        """Update the set of terminals that have open tabs in the frontend."""
+        self._active_terminals = set(terminals)
+        logger.debug(f"[Culler] Active terminals updated: {self._active_terminals}")
+
+    def _terminal_has_active_tab(self, name: str) -> bool:
+        """Check if a terminal has an active tab in the frontend."""
+        return name in self._active_terminals
 
     async def _cull_idle_resources(self) -> None:
         """Main culling routine called by periodic callback."""
@@ -225,19 +237,6 @@ class ResourceCuller:
 
         return culled
 
-    def _terminal_has_connected_clients(self, terminal_mgr: Any, name: str) -> bool:
-        """Check if a terminal has active WebSocket connections (open browser tabs)."""
-        try:
-            # Access terminado's internal terminals dict
-            if hasattr(terminal_mgr, "terminals"):
-                term = terminal_mgr.terminals.get(name)
-                if term is not None and hasattr(term, "clients"):
-                    return len(term.clients) > 0
-        except Exception as e:
-            logger.debug(f"[Culler] Could not check clients for terminal {name}: {e}")
-        # If we can't determine, assume no clients (allow culling)
-        return False
-
     async def _cull_terminals(self) -> list[str]:
         """Cull idle terminals exceeding timeout threshold."""
         culled: list[str] = []
@@ -261,11 +260,11 @@ class ResourceCuller:
                 if name is None:
                     continue
 
-                # Check for connected clients if setting enabled
+                # Check for active tabs if setting enabled
                 if self._terminal_cull_disconnected_only:
-                    if self._terminal_has_connected_clients(terminal_mgr, name):
+                    if self._terminal_has_active_tab(name):
                         logger.debug(
-                            f"[Culler] Skipping terminal {name} - has active browser connections"
+                            f"[Culler] Skipping terminal {name} - has active tab"
                         )
                         continue
 
