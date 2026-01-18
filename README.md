@@ -25,6 +25,7 @@ Automatically cull idle kernels, terminals, and sessions after configurable time
 |---------|---------|-------------|
 | Kernel timeout | 60 min (1 hour) | Idle kernels culled after this period |
 | Terminal timeout | 60 min (1 hour) | Inactive terminals culled after this period |
+| Disconnected only | enabled | Only cull terminals with no open browser tab |
 | Session timeout | 10080 min (7 days) | Idle sessions culled after this period |
 | Check interval | 5 min | How often the culler checks for idle resources |
 | Notifications | enabled | Show notification when resources are culled |
@@ -33,7 +34,7 @@ Automatically cull idle kernels, terminals, and sessions after configurable time
 
 **Kernels**: Checked for `execution_state` (busy kernels are never culled) and `last_activity` timestamp. A kernel is idle when it's not executing and hasn't had activity beyond the timeout.
 
-**Terminals**: Based on WebSocket activity. If the browser tab is closed, activity stops being recorded even if the terminal process is running. For long-running jobs, use `nohup`, `screen`, or `tmux`.
+**Terminals**: By default, only terminals with no active browser tab are culled (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed, the terminal becomes eligible for culling after the idle timeout.
 
 **Sessions**: Based on the associated kernel's `last_activity`.
 
@@ -86,7 +87,7 @@ python long_calculation.py
 
 **Q: Will closing my browser tab kill my running process?**
 
-For terminals: The terminal will be culled after the timeout since WebSocket activity stops when the browser closes. Foreground processes receive SIGHUP. Use `nohup`, `screen`, or `tmux` for processes that must survive.
+For terminals: By default, terminals are only culled when the browser tab is closed (disconnected). After closing the tab, the terminal will be culled once the idle timeout expires. Foreground processes receive SIGHUP. Use `nohup`, `screen`, or `tmux` for processes that must survive.
 
 For kernels: The kernel continues running. Activity is tracked server-side, so a busy kernel won't be culled even if the browser is closed.
 

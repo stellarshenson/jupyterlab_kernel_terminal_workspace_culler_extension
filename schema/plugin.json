@@ -28,6 +28,12 @@
       "default": 60,
       "minimum": 1
     },
+    "terminalCullDisconnectedOnly": {
+      "type": "boolean",
+      "title": "Only Cull Disconnected Terminals",
+      "description": "When enabled, only cull terminals with no active browser tab. Terminals with open tabs are kept even if idle.",
+      "default": true
+    },
     "sessionCullEnabled": {
       "type": "boolean",
       "title": "Enable Session Culling",

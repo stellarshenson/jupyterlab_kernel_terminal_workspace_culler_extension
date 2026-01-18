@@ -21,6 +21,7 @@ class ResourceCuller:
         self._kernel_cull_idle_timeout = 60  # minutes (1 hour)
         self._terminal_cull_enabled = True
         self._terminal_cull_idle_timeout = 60  # minutes (1 hour)
+        self._terminal_cull_disconnected_only = True  # only cull terminals with no active tab
         self._session_cull_enabled = False
         self._session_cull_idle_timeout = 10080  # minutes (7 days)
         self._cull_check_interval = 5  # minutes
@@ -61,6 +62,8 @@ class ResourceCuller:
             self._terminal_cull_enabled = settings["terminalCullEnabled"]
         if "terminalCullIdleTimeout" in settings:
             self._terminal_cull_idle_timeout = settings["terminalCullIdleTimeout"]
+        if "terminalCullDisconnectedOnly" in settings:
+            self._terminal_cull_disconnected_only = settings["terminalCullDisconnectedOnly"]
         if "sessionCullEnabled" in settings:
             self._session_cull_enabled = settings["sessionCullEnabled"]
         if "sessionCullIdleTimeout" in settings:
@@ -76,7 +79,8 @@ class ResourceCuller:
 
         logger.info(
             f"[Culler] Settings updated: kernel={self._kernel_cull_enabled}/{self._kernel_cull_idle_timeout}min, "
-            f"terminal={self._terminal_cull_enabled}/{self._terminal_cull_idle_timeout}min, "
+            f"terminal={self._terminal_cull_enabled}/{self._terminal_cull_idle_timeout}min"
+            f"(disconnected_only={self._terminal_cull_disconnected_only}), "
             f"session={self._session_cull_enabled}/{self._session_cull_idle_timeout}min, "
             f"interval={self._cull_check_interval}min"
         )
@@ -88,6 +92,7 @@ class ResourceCuller:
             "kernelCullIdleTimeout": self._kernel_cull_idle_timeout,
             "terminalCullEnabled": self._terminal_cull_enabled,
             "terminalCullIdleTimeout": self._terminal_cull_idle_timeout,
+            "terminalCullDisconnectedOnly": self._terminal_cull_disconnected_only,
             "sessionCullEnabled": self._session_cull_enabled,
             "sessionCullIdleTimeout": self._session_cull_idle_timeout,
             "cullCheckInterval": self._cull_check_interval,
@@ -202,6 +207,19 @@ class ResourceCuller:
 
         return culled
 
+    def _terminal_has_connected_clients(self, terminal_mgr: Any, name: str) -> bool:
+        """Check if a terminal has active WebSocket connections (open browser tabs)."""
+        try:
+            # Access terminado's internal terminals dict
+            if hasattr(terminal_mgr, "terminals"):
+                term = terminal_mgr.terminals.get(name)
+                if term is not None and hasattr(term, "clients"):
+                    return len(term.clients) > 0
+        except Exception as e:
+            logger.debug(f"[Culler] Could not check clients for terminal {name}: {e}")
+        # If we can't determine, assume no clients (allow culling)
+        return False
+
     async def _cull_terminals(self) -> list[str]:
         """Cull idle terminals exceeding timeout threshold."""
         culled: list[str] = []
@@ -224,6 +242,14 @@ class ResourceCuller:
                 name = terminal.get("name")
                 if name is None:
                     continue
+
+                # Check for connected clients if setting enabled
+                if self._terminal_cull_disconnected_only:
+                    if self._terminal_has_connected_clients(terminal_mgr, name):
+                        logger.debug(
+                            f"[Culler] Skipping terminal {name} - has active browser connections"
+                        )
+                        continue
 
                 last_activity = terminal.get("last_activity")
                 if last_activity is None:
