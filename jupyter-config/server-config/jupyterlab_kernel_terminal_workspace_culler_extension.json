@@ -1,0 +1,7 @@
+{
+  "ServerApp": {
+    "jpserver_extensions": {
+      "jupyterlab_kernel_terminal_workspace_culler_extension": true
+    }
+  }
+}

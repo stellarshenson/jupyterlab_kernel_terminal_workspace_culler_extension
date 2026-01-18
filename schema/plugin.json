@@ -1,0 +1,8 @@
+{
+  "jupyter.lab.shortcuts": [],
+  "title": "jupyterlab_kernel_terminal_workspace_culler_extension",
+  "description": "jupyterlab_kernel_terminal_workspace_culler_extension settings.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}
