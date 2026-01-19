@@ -1,7 +1,7 @@
 {
   "jupyter.lab.shortcuts": [],
   "title": "Resource Culler",
-  "description": "Automatic culling of idle kernels, terminals, and sessions",
+  "description": "Automatic culling of idle kernels, terminals, and workspaces",
   "type": "object",
   "properties": {
     "kernelCullEnabled": {
@@ -34,15 +34,16 @@
       "description": "When enabled, only cull terminals with no active browser tab. Terminals with open tabs are kept even if idle.",
       "default": true
     },
-    "sessionCullEnabled": {
+    "workspaceCullEnabled": {
       "type": "boolean",
-      "title": "Enable Session Culling",
+      "title": "Enable Workspace Culling",
+      "description": "Cull unused JupyterLab workspaces (auto-0, auto-k, etc.). The default workspace is never culled.",
       "default": false
     },
-    "sessionCullIdleTimeout": {
+    "workspaceCullIdleTimeout": {
       "type": "integer",
-      "title": "Session Idle Timeout (minutes)",
-      "description": "Default: 7 days (10080 minutes)",
+      "title": "Workspace Idle Timeout (minutes)",
+      "description": "Default: 7 days (10080 minutes). Based on last_modified timestamp.",
       "default": 10080,
       "minimum": 1
     },

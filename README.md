@@ -8,13 +8,13 @@
 [![Brought To You By KOLOMOLO](https://img.shields.io/badge/Brought%20To%20You%20By-KOLOMOLO-00ffff?style=flat)](https://kolomolo.com)
 [![Donate PayPal](https://img.shields.io/badge/Donate-PayPal-blue?style=flat)](https://www.paypal.com/donate/?hosted_button_id=B4KPBJDLLXTSA)
 
-Automatically cull idle kernels, terminals, and sessions after configurable timeout periods. Helps manage system resources by cleaning up unused sessions that accumulate during long JupyterLab usage.
+Automatically cull idle kernels, terminals, and workspaces after configurable timeout periods. Helps manage system resources by cleaning up unused resources that accumulate during long JupyterLab usage.
 
 ## Features
 
 - **Idle kernel culling** - Shut down kernels idle beyond timeout (checks `execution_state` and `last_activity`)
 - **Idle terminal culling** - Close terminals with no WebSocket activity beyond timeout
-- **Session culling** - Remove stale sessions based on associated kernel activity
+- **Workspace culling** - Remove stale JupyterLab workspaces (auto-0, auto-k, etc.) based on last modified time
 - **Configurable timeouts** - All timeouts adjustable via JupyterLab Settings
 - **Notifications** - Optional toast notifications when resources are culled (requires `jupyterlab-notifications`)
 - **Server-side detection** - Uses tornado PeriodicCallback for accurate activity tracking
@@ -26,7 +26,8 @@ Automatically cull idle kernels, terminals, and sessions after configurable time
 | Kernel timeout    | 60 min (1 hour)    | Idle kernels culled after this period          |
 | Terminal timeout  | 60 min (1 hour)    | Inactive terminals culled after this period    |
 | Disconnected only | enabled            | Only cull terminals with no open browser tab   |
-| Session timeout   | 10080 min (7 days) | Idle sessions culled after this period         |
+| Workspace culling | disabled           | Disabled by default - enable in settings       |
+| Workspace timeout | 10080 min (7 days) | Stale workspaces culled after this period      |
 | Check interval    | 5 min              | How often the culler checks for idle resources |
 | Notifications     | enabled            | Show notification when resources are culled    |
 
@@ -36,7 +37,7 @@ Automatically cull idle kernels, terminals, and sessions after configurable time
 
 **Terminals**: By default, only terminals with no active browser tab are culled (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed, the terminal becomes eligible for culling after the idle timeout.
 
-**Sessions**: Based on the associated kernel's `last_activity`.
+**Workspaces**: Based on the workspace file's `last_modified` timestamp. JupyterLab creates auto-named workspaces (auto-0, auto-k, etc.) when you open multiple windows. The default workspace is never culled.
 
 > **Note**: Terminal culling sends SIGHUP to the terminal process. Processes started with `nohup` will survive culling.
 

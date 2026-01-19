@@ -159,24 +159,24 @@ class JupyterClient:
             })
         return result
 
-    def list_sessions(self) -> list[dict]:
-        """List all sessions with their status."""
-        sessions = self._get("api/sessions")
-        result = []
-        for s in sessions:
-            kernel = s.get("kernel", {})
-            result.append({
-                "id": s.get("id"),
-                "name": s.get("name"),
-                "path": s.get("path"),
-                "type": s.get("type"),
-                "kernel_id": kernel.get("id"),
-                "kernel_state": kernel.get("execution_state"),
-                "last_activity": kernel.get("last_activity"),
-                "idle_seconds": format_idle_seconds(kernel.get("last_activity")),
-                "idle_time": format_idle_time(kernel.get("last_activity")),
-            })
-        return result
+    def list_workspaces(self) -> list[dict]:
+        """List all workspaces with their status."""
+        try:
+            workspaces = self._get(
+                "jupyterlab-kernel-terminal-workspace-culler-extension/workspaces"
+            )
+            result = []
+            for w in workspaces:
+                result.append({
+                    "id": w.get("id"),
+                    "last_modified": w.get("last_modified"),
+                    "created": w.get("created"),
+                    "idle_seconds": format_idle_seconds(w.get("last_modified")),
+                    "idle_time": format_idle_time(w.get("last_modified")),
+                })
+            return result
+        except Exception:
+            return []
 
     def shutdown_kernel(self, kernel_id: str) -> bool:
         """Shutdown a kernel."""
@@ -185,10 +185,6 @@ class JupyterClient:
     def terminate_terminal(self, name: str) -> bool:
         """Terminate a terminal."""
         return self._delete(f"api/terminals/{name}")
-
-    def delete_session(self, session_id: str) -> bool:
-        """Delete a session."""
-        return self._delete(f"api/sessions/{session_id}")
 
     def get_culler_status(self) -> dict | None:
         """Get culler status and settings from the extension."""
@@ -209,7 +205,7 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     """List all resources and their idle times."""
     kernels = client.list_kernels()
     terminals = client.list_terminals()
-    sessions = client.list_sessions()
+    workspaces = client.list_workspaces()
     culler_status = client.get_culler_status()
     terminals_connection = client.get_terminals_connection()
 
@@ -222,7 +218,7 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
         output = {
             "kernels": kernels,
             "terminals": terminals,
-            "sessions": sessions,
+            "workspaces": workspaces,
             "culler": culler_status,
         }
         print(json.dumps(output, indent=2, default=str))
@@ -238,7 +234,7 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
         print(f"  Check interval: {settings.get('cullCheckInterval', '?')} min")
         print(f"  Kernel culling: {'enabled' if settings.get('kernelCullEnabled') else 'disabled'}, timeout: {settings.get('kernelCullIdleTimeout', '?')} min")
         print(f"  Terminal culling: {'enabled' if settings.get('terminalCullEnabled') else 'disabled'}, timeout: {settings.get('terminalCullIdleTimeout', '?')} min, disconnected-only: {settings.get('terminalCullDisconnectedOnly', '?')}")
-        print(f"  Session culling: {'enabled' if settings.get('sessionCullEnabled') else 'disabled'}, timeout: {settings.get('sessionCullIdleTimeout', '?')} min")
+        print(f"  Workspace culling: {'enabled' if settings.get('workspaceCullEnabled') else 'disabled'}, timeout: {settings.get('workspaceCullIdleTimeout', '?')} min")
     else:
         print("  (culler extension not available)")
 
@@ -260,15 +256,13 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     else:
         print("  (none)")
 
-    print("\nSESSIONS")
+    print("\nWORKSPACES")
     print("-" * 60)
-    if sessions:
-        for s in sessions:
-            state = s["kernel_state"] or "unknown"
-            path = s["path"] or "(no path)"
-            if len(path) > 40:
-                path = "..." + path[-37:]
-            print(f"  {s['id'][:8]}  {state:8}  idle: {s['idle_time']:>8}  {path}")
+    if workspaces:
+        for w in workspaces:
+            ws_id = w["id"] or "unknown"
+            protected = " (protected)" if ws_id == "default" else ""
+            print(f"  {ws_id:12}  idle: {w['idle_time']:>8}{protected}")
     else:
         print("  (none)")
 
@@ -279,17 +273,14 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
     """Cull idle resources."""
     kernels = client.list_kernels()
     terminals = client.list_terminals()
-    sessions = client.list_sessions()
 
     # Default timeouts in seconds
     kernel_timeout = args.kernel_timeout * 60
     terminal_timeout = args.terminal_timeout * 60
-    session_timeout = args.session_timeout * 60
 
     results = {
         "kernels_culled": [],
         "terminals_culled": [],
-        "sessions_culled": [],
         "dry_run": args.dry_run,
     }
 
@@ -313,16 +304,8 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
                 success = client.terminate_terminal(t["name"])
                 results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "culled" if success else "failed"})
 
-    # Cull idle sessions
-    for s in sessions:
-        if s["kernel_state"] == "busy":
-            continue
-        if s["idle_seconds"] > 0 and s["idle_seconds"] > session_timeout:
-            if args.dry_run:
-                results["sessions_culled"].append({"id": s["id"], "idle_time": s["idle_time"], "action": "would_cull"})
-            else:
-                success = client.delete_session(s["id"])
-                results["sessions_culled"].append({"id": s["id"], "idle_time": s["idle_time"], "action": "culled" if success else "failed"})
+    # Note: Workspace culling is handled by the backend only (requires file system access)
+    # The CLI can list workspaces but culling is done via the periodic culler
 
     if args.json:
         print(json.dumps(results, indent=2))
@@ -345,12 +328,7 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
     else:
         print(f"{prefix}No terminals to cull")
 
-    if results["sessions_culled"]:
-        print(f"{prefix}Sessions culled:")
-        for s in results["sessions_culled"]:
-            print(f"  {s['id'][:8]}  idle: {s['idle_time']}  ({s['action']})")
-    else:
-        print(f"{prefix}No sessions to cull")
+    print(f"\nNote: Workspace culling is handled by the backend culler (requires file system access)")
 
     return 0
 
@@ -359,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     """Main entry point for CLI."""
     parser = argparse.ArgumentParser(
         prog="jupyterlab_kernel_terminal_workspace_culler",
-        description="List and cull idle Jupyter kernels, terminals, and sessions.",
+        description="List and cull idle Jupyter kernels, terminals, and workspaces.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Environment variables:
@@ -390,7 +368,6 @@ Examples:
     cull_parser.add_argument("--dry-run", action="store_true", help="Simulate culling without actually terminating")
     cull_parser.add_argument("--kernel-timeout", type=int, default=60, metavar="MIN", help="Kernel idle timeout in minutes (default: 60)")
     cull_parser.add_argument("--terminal-timeout", type=int, default=60, metavar="MIN", help="Terminal idle timeout in minutes (default: 60)")
-    cull_parser.add_argument("--session-timeout", type=int, default=10080, metavar="MIN", help="Session idle timeout in minutes (default: 10080)")
     cull_parser.set_defaults(func=cmd_cull)
 
     args = parser.parse_args(argv)

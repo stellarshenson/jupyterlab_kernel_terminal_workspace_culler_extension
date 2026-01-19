@@ -1,7 +1,8 @@
-"""Resource culler for idle kernels, terminals, and sessions."""
+"""Resource culler for idle kernels, terminals, and workspaces."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from tornado.ioloop import PeriodicCallback
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class ResourceCuller:
-    """Culls idle kernels, terminals, and sessions based on configurable timeouts."""
+    """Culls idle kernels, terminals, and workspaces based on configurable timeouts."""
 
     def __init__(self, server_app: Any) -> None:
         self._server_app = server_app
@@ -22,20 +23,23 @@ class ResourceCuller:
         self._terminal_cull_enabled = True
         self._terminal_cull_idle_timeout = 60  # minutes (1 hour)
         self._terminal_cull_disconnected_only = True  # only cull terminals with no active tab
-        self._session_cull_enabled = False
-        self._session_cull_idle_timeout = 10080  # minutes (7 days)
+        self._workspace_cull_enabled = False
+        self._workspace_cull_idle_timeout = 10080  # minutes (7 days)
         self._cull_check_interval = 5  # minutes
 
         # Last culling result for notification polling
         self._last_cull_result: dict[str, list[str]] = {
             "kernels_culled": [],
             "terminals_culled": [],
-            "sessions_culled": [],
+            "workspaces_culled": [],
         }
         self._result_consumed = True  # Track if frontend has fetched the result
 
         # Active terminals reported by frontend (terminals with open tabs)
         self._active_terminals: set[str] = set()
+
+        # Workspace manager (lazy initialization)
+        self._workspace_manager: Any = None
 
     @property
     def kernel_manager(self) -> Any:
@@ -51,9 +55,25 @@ class ResourceCuller:
         return self._server_app.web_app.settings.get("terminal_manager")
 
     @property
-    def session_manager(self) -> Any:
-        """Access the session manager from jupyter_server."""
-        return self._server_app.session_manager
+    def workspace_manager(self) -> Any:
+        """Access the workspace manager from jupyterlab_server."""
+        if self._workspace_manager is None:
+            try:
+                from jupyterlab_server.workspaces_handler import WorkspacesManager
+
+                # Get workspaces directory from jupyterlab settings
+                workspaces_dir = Path.home() / ".jupyter" / "lab" / "workspaces"
+                if workspaces_dir.exists():
+                    self._workspace_manager = WorkspacesManager(str(workspaces_dir))
+                else:
+                    logger.warning(
+                        f"[Culler] Workspaces directory not found: {workspaces_dir}"
+                    )
+            except ImportError:
+                logger.warning(
+                    "[Culler] jupyterlab_server not available for workspace management"
+                )
+        return self._workspace_manager
 
     def update_settings(self, settings: dict[str, Any]) -> None:
         """Update culler settings from frontend (camelCase -> snake_case)."""
@@ -67,10 +87,10 @@ class ResourceCuller:
             self._terminal_cull_idle_timeout = settings["terminalCullIdleTimeout"]
         if "terminalCullDisconnectedOnly" in settings:
             self._terminal_cull_disconnected_only = settings["terminalCullDisconnectedOnly"]
-        if "sessionCullEnabled" in settings:
-            self._session_cull_enabled = settings["sessionCullEnabled"]
-        if "sessionCullIdleTimeout" in settings:
-            self._session_cull_idle_timeout = settings["sessionCullIdleTimeout"]
+        if "workspaceCullEnabled" in settings:
+            self._workspace_cull_enabled = settings["workspaceCullEnabled"]
+        if "workspaceCullIdleTimeout" in settings:
+            self._workspace_cull_idle_timeout = settings["workspaceCullIdleTimeout"]
         if "cullCheckInterval" in settings:
             new_interval = settings["cullCheckInterval"]
             if new_interval != self._cull_check_interval:
@@ -84,7 +104,7 @@ class ResourceCuller:
             f"[Culler] Settings updated: kernel={self._kernel_cull_enabled}/{self._kernel_cull_idle_timeout}min, "
             f"terminal={self._terminal_cull_enabled}/{self._terminal_cull_idle_timeout}min"
             f"(disconnected_only={self._terminal_cull_disconnected_only}), "
-            f"session={self._session_cull_enabled}/{self._session_cull_idle_timeout}min, "
+            f"workspace={self._workspace_cull_enabled}/{self._workspace_cull_idle_timeout}min, "
             f"interval={self._cull_check_interval}min"
         )
 
@@ -96,8 +116,8 @@ class ResourceCuller:
             "terminalCullEnabled": self._terminal_cull_enabled,
             "terminalCullIdleTimeout": self._terminal_cull_idle_timeout,
             "terminalCullDisconnectedOnly": self._terminal_cull_disconnected_only,
-            "sessionCullEnabled": self._session_cull_enabled,
-            "sessionCullIdleTimeout": self._session_cull_idle_timeout,
+            "workspaceCullEnabled": self._workspace_cull_enabled,
+            "workspaceCullIdleTimeout": self._workspace_cull_idle_timeout,
             "cullCheckInterval": self._cull_check_interval,
         }
 
@@ -133,7 +153,7 @@ class ResourceCuller:
     def get_last_cull_result(self) -> dict[str, list[str]]:
         """Return last culling result and mark as consumed."""
         if self._result_consumed:
-            return {"kernels_culled": [], "terminals_culled": [], "sessions_culled": []}
+            return {"kernels_culled": [], "terminals_culled": [], "workspaces_culled": []}
         self._result_consumed = True
         return self._last_cull_result
 
@@ -164,11 +184,31 @@ class ResourceCuller:
         """Check if a terminal has an active tab in the frontend."""
         return name in self._active_terminals
 
+    def list_workspaces(self) -> list[dict[str, Any]]:
+        """Return list of workspaces with their metadata."""
+        result: list[dict[str, Any]] = []
+        ws_mgr = self.workspace_manager
+        if ws_mgr is None:
+            return result
+
+        try:
+            for ws in ws_mgr.list_workspaces():
+                metadata = ws.get("metadata", {})
+                result.append({
+                    "id": metadata.get("id", "unknown"),
+                    "last_modified": metadata.get("last_modified"),
+                    "created": metadata.get("created"),
+                })
+        except Exception as e:
+            logger.error(f"[Culler] Failed to list workspaces: {e}")
+
+        return result
+
     async def _cull_idle_resources(self) -> None:
         """Main culling routine called by periodic callback."""
         kernels_culled: list[str] = []
         terminals_culled: list[str] = []
-        sessions_culled: list[str] = []
+        workspaces_culled: list[str] = []
 
         if self._kernel_cull_enabled:
             kernels_culled = await self._cull_kernels()
@@ -176,15 +216,15 @@ class ResourceCuller:
         if self._terminal_cull_enabled:
             terminals_culled = await self._cull_terminals()
 
-        if self._session_cull_enabled:
-            sessions_culled = await self._cull_sessions()
+        if self._workspace_cull_enabled:
+            workspaces_culled = self._cull_workspaces()
 
         # Store result for notification polling
-        if kernels_culled or terminals_culled or sessions_culled:
+        if kernels_culled or terminals_culled or workspaces_culled:
             self._last_cull_result = {
                 "kernels_culled": kernels_culled,
                 "terminals_culled": terminals_culled,
-                "sessions_culled": sessions_culled,
+                "workspaces_culled": workspaces_culled,
             }
             self._result_consumed = False
 
@@ -299,63 +339,62 @@ class ResourceCuller:
 
         return culled
 
-    async def _cull_sessions(self) -> list[str]:
-        """Cull idle sessions exceeding timeout threshold."""
+    def _cull_workspaces(self) -> list[str]:
+        """Cull idle workspaces exceeding timeout threshold."""
         culled: list[str] = []
         now = datetime.now(timezone.utc)
-        timeout_seconds = self._session_cull_idle_timeout * 60
+        timeout_seconds = self._workspace_cull_idle_timeout * 60
 
-        try:
-            sessions = await self.session_manager.list_sessions()
-        except Exception as e:
-            logger.error(f"[Culler] Failed to list sessions: {e}")
+        ws_mgr = self.workspace_manager
+        if ws_mgr is None:
+            logger.warning("[Culler] Workspace manager not available")
             return culled
 
-        for session in sessions:
+        try:
+            workspaces = list(ws_mgr.list_workspaces())
+        except Exception as e:
+            logger.error(f"[Culler] Failed to list workspaces: {e}")
+            return culled
+
+        for workspace in workspaces:
             try:
-                session_id = session.get("id")
-                if session_id is None:
+                metadata = workspace.get("metadata", {})
+                workspace_id = metadata.get("id")
+                if workspace_id is None:
                     continue
 
-                # Get kernel info from session
-                kernel_info = session.get("kernel", {})
-                kernel_id = kernel_info.get("id")
+                # Never cull the default workspace
+                if workspace_id == "default":
+                    logger.debug("[Culler] Skipping default workspace")
+                    continue
 
-                if kernel_id:
-                    # Check kernel last activity
-                    try:
-                        kernel = self.kernel_manager.get_kernel(kernel_id)
-                        if kernel is None:
-                            continue
+                last_modified = metadata.get("last_modified")
+                if last_modified is None:
+                    continue
 
-                        last_activity = getattr(kernel, "last_activity", None)
-                        if last_activity is None:
-                            continue
+                # Parse datetime if string
+                if isinstance(last_modified, str):
+                    last_modified = datetime.fromisoformat(
+                        last_modified.replace("Z", "+00:00")
+                    )
 
-                        # Ensure timezone-aware comparison
-                        if last_activity.tzinfo is None:
-                            last_activity = last_activity.replace(tzinfo=timezone.utc)
+                # Ensure timezone-aware comparison
+                if last_modified.tzinfo is None:
+                    last_modified = last_modified.replace(tzinfo=timezone.utc)
 
-                        idle_seconds = (now - last_activity).total_seconds()
-                        idle_minutes = idle_seconds / 60
+                idle_seconds = (now - last_modified).total_seconds()
+                idle_minutes = idle_seconds / 60
 
-                        if idle_seconds > timeout_seconds:
-                            logger.info(
-                                f"[Culler] CULLING SESSION {session_id} - idle {idle_minutes:.1f} minutes "
-                                f"(threshold: {self._session_cull_idle_timeout})"
-                            )
-                            await self.session_manager.delete_session(session_id)
-                            logger.info(
-                                f"[Culler] Session {session_id} culled successfully"
-                            )
-                            culled.append(session_id)
-
-                    except Exception as e:
-                        logger.error(
-                            f"[Culler] Failed to get kernel for session {session_id}: {e}"
-                        )
+                if idle_seconds > timeout_seconds:
+                    logger.info(
+                        f"[Culler] CULLING WORKSPACE {workspace_id} - idle {idle_minutes:.1f} minutes "
+                        f"(threshold: {self._workspace_cull_idle_timeout})"
+                    )
+                    ws_mgr.delete(workspace_id)
+                    logger.info(f"[Culler] Workspace {workspace_id} culled successfully")
+                    culled.append(workspace_id)
 
             except Exception as e:
-                logger.error(f"[Culler] Failed to cull session {session_id}: {e}")
+                logger.error(f"[Culler] Failed to cull workspace {workspace_id}: {e}")
 
         return culled

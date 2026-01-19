@@ -91,16 +91,16 @@ async function pollCullResults(app: JupyterFrontEnd): Promise<void> {
     const result = await requestAPI<{
       kernels_culled: string[];
       terminals_culled: string[];
-      sessions_culled: string[];
+      workspaces_culled: string[];
     }>('cull-result');
 
     const kernelCount = result.kernels_culled?.length ?? 0;
     const terminalCount = result.terminals_culled?.length ?? 0;
-    const sessionCount = result.sessions_culled?.length ?? 0;
+    const workspaceCount = result.workspaces_culled?.length ?? 0;
 
     if (
       showNotifications &&
-      (kernelCount > 0 || terminalCount > 0 || sessionCount > 0)
+      (kernelCount > 0 || terminalCount > 0 || workspaceCount > 0)
     ) {
       const lines: string[] = ['Idle resources culled:'];
       if (kernelCount > 0) {
@@ -109,8 +109,8 @@ async function pollCullResults(app: JupyterFrontEnd): Promise<void> {
       if (terminalCount > 0) {
         lines.push(`Terminals: ${terminalCount}`);
       }
-      if (sessionCount > 0) {
-        lines.push(`Sessions: ${sessionCount}`);
+      if (workspaceCount > 0) {
+        lines.push(`Workspaces: ${workspaceCount}`);
       }
 
       // Try to use jupyterlab-notifications-extension if available
@@ -164,7 +164,7 @@ async function reportActiveTerminals(tracker: ITerminalTracker): Promise<void> {
 const plugin: JupyterFrontEndPlugin<void> = {
   id: 'jupyterlab_kernel_terminal_workspace_culler_extension:plugin',
   description:
-    'JupyterLab extension to automatically cull idle kernels, terminals, and sessions.',
+    'JupyterLab extension to automatically cull idle kernels, terminals, and workspaces.',
   autoStart: true,
   optional: [ISettingRegistry, ITerminalTracker],
   activate: (

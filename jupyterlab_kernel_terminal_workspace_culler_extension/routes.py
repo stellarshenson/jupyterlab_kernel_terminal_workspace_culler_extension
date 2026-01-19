@@ -74,7 +74,7 @@ class CullResultHandler(APIHandler):
                     {
                         "kernels_culled": [],
                         "terminals_culled": [],
-                        "sessions_culled": [],
+                        "workspaces_culled": [],
                     }
                 )
             )
@@ -119,6 +119,19 @@ class ActiveTerminalsHandler(APIHandler):
             self.finish(json.dumps({"error": str(e)}))
 
 
+class WorkspacesHandler(APIHandler):
+    """Handler for listing workspaces."""
+
+    @tornado.web.authenticated
+    def get(self) -> None:
+        """Return list of workspaces with metadata."""
+        if _culler is None:
+            self.finish(json.dumps([]))
+            return
+
+        self.finish(json.dumps(_culler.list_workspaces()))
+
+
 def setup_route_handlers(web_app: tornado.web.Application) -> None:
     """Set up route handlers for the extension."""
     host_pattern = ".*$"
@@ -131,6 +144,7 @@ def setup_route_handlers(web_app: tornado.web.Application) -> None:
         (url_path_join(base_url, namespace, "cull-result"), CullResultHandler),
         (url_path_join(base_url, namespace, "terminals-connection"), TerminalsConnectionHandler),
         (url_path_join(base_url, namespace, "active-terminals"), ActiveTerminalsHandler),
+        (url_path_join(base_url, namespace, "workspaces"), WorkspacesHandler),
     ]
 
     web_app.add_handlers(host_pattern, handlers)
