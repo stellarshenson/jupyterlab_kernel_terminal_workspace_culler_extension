@@ -23,7 +23,7 @@ class ResourceCuller:
         self._terminal_cull_enabled = True
         self._terminal_cull_idle_timeout = 60  # minutes (1 hour)
         self._terminal_cull_disconnected_only = True  # only cull terminals with no active tab
-        self._workspace_cull_enabled = False
+        self._workspace_cull_enabled = True
         self._workspace_cull_idle_timeout = 10080  # minutes (7 days)
         self._cull_check_interval = 5  # minutes
 

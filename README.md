@@ -21,15 +21,15 @@ Automatically cull idle kernels, terminals, and workspaces after configurable ti
 
 ## Default Settings
 
-| Setting           | Default            | Description                                    |
-| ----------------- | ------------------ | ---------------------------------------------- |
-| Kernel timeout    | 60 min (1 hour)    | Idle kernels culled after this period          |
-| Terminal timeout  | 60 min (1 hour)    | Inactive terminals culled after this period    |
-| Disconnected only | enabled            | Only cull terminals with no open browser tab   |
-| Workspace culling | disabled           | Disabled by default - enable in settings       |
-| Workspace timeout | 10080 min (7 days) | Stale workspaces culled after this period      |
-| Check interval    | 5 min              | How often the culler checks for idle resources |
-| Notifications     | enabled            | Show notification when resources are culled    |
+| Setting           | Default            | Description                                         |
+| ----------------- | ------------------ | --------------------------------------------------- |
+| Kernel timeout    | 60 min (1 hour)    | Idle kernels culled after this period               |
+| Terminal timeout  | 60 min (1 hour)    | Inactive terminals culled after this period         |
+| Disconnected only | enabled            | Only cull terminals with no open browser tab        |
+| Workspace culling | enabled            | Cull stale workspaces (default workspace protected) |
+| Workspace timeout | 10080 min (7 days) | Stale workspaces culled after this period           |
+| Check interval    | 5 min              | How often the culler checks for idle resources      |
+| Notifications     | enabled            | Show notification when resources are culled         |
 
 ## How Idle Detection Works
 

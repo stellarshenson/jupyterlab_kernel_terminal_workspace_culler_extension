@@ -38,7 +38,7 @@
       "type": "boolean",
       "title": "Enable Workspace Culling",
       "description": "Cull unused JupyterLab workspaces (auto-0, auto-k, etc.). The default workspace is never culled.",
-      "default": false
+      "default": true
     },
     "workspaceCullIdleTimeout": {
       "type": "integer",
