@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="1" failures="0" errors="0" time="1.535">
-  <testsuite name="jupyterlab_kernel_terminal_workspace_culler_extension" errors="0" failures="0" skipped="0" timestamp="2026-01-19T08:13:06" time="0.73" tests="1">
-    <testcase classname="jupyterlab_kernel_terminal_workspace_culler_extension should be tested" name="jupyterlab_kernel_terminal_workspace_culler_extension should be tested" time="0.002">
+<testsuites name="jest tests" tests="1" failures="0" errors="0" time="2.068">
+  <testsuite name="jupyterlab_kernel_terminal_workspace_culler_extension" errors="0" failures="0" skipped="0" timestamp="2026-01-20T09:13:23" time="1.182" tests="1">
+    <testcase classname="jupyterlab_kernel_terminal_workspace_culler_extension should be tested" name="jupyterlab_kernel_terminal_workspace_culler_extension should be tested" time="0.001">
     </testcase>
   </testsuite>
 </testsuites>
