@@ -38,3 +38,6 @@ This journal tracks substantive work on documents, diagrams, and documentation c
 
 9. **Task - Enable workspace culling by default** (v1.0.20): Changed workspace culling default from disabled to enabled<br>
    **Result**: Updated `schema/plugin.json` setting `workspaceCullEnabled` default from `false` to `true`. Updated `culler.py` initial value `_workspace_cull_enabled = True`. Updated `README.md` Default Settings table to show workspace culling as enabled. Published v1.0.20 to npm and PyPI.
+
+10. **Task - CLI workspace culling and --json fix** (v1.0.21): Added workspace culling to CLI and moved --json to subcommands<br>
+    **Result**: Moved `--json` option from top-level to `list` and `cull` subcommands - now `list --json` and `cull --json` instead of `--json list`. Added `--workspace-timeout` option to `cull` command (default 10080 min = 7 days). Added `cull_workspaces_with_timeout(timeout_minutes, dry_run)` method to `culler.py` for CLI-triggered workspace culling with custom timeout. Added `CullWorkspacesHandler` in `routes.py` for POST `/cull-workspaces` endpoint accepting `timeout` and `dry_run` parameters. Added `cull_workspaces()` method to `JupyterClient` in `cli.py`. Updated `cmd_cull()` to include workspaces in output alongside kernels and terminals. Updated `README.md` CLI section with new examples. Published v1.0.21 to npm and PyPI.

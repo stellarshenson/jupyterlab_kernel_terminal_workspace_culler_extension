@@ -125,8 +125,14 @@ jupyterlab_kernel_terminal_workspace_culler cull --dry-run
 # Cull idle resources
 jupyterlab_kernel_terminal_workspace_culler cull
 
-# Custom timeouts
+# Cull and output as JSON
+jupyterlab_kernel_terminal_workspace_culler cull --json
+
+# Custom timeouts (minutes)
 jupyterlab_kernel_terminal_workspace_culler cull --kernel-timeout 30 --terminal-timeout 120
+
+# Cull workspaces idle > 1 minute (default is 7 days)
+jupyterlab_kernel_terminal_workspace_culler cull --workspace-timeout 1
 ```
 
 The CLI auto-discovers running Jupyter servers. You can also set environment variables:
