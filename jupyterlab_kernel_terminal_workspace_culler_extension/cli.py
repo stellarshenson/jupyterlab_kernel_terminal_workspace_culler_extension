@@ -200,6 +200,24 @@ class JupyterClient:
         except Exception:
             return {}
 
+    def cull_workspaces(self, timeout_minutes: int, dry_run: bool = False) -> list[dict]:
+        """Cull workspaces via the backend extension."""
+        try:
+            url = urljoin(
+                self.server_url,
+                "jupyterlab-kernel-terminal-workspace-culler-extension/cull-workspaces",
+            )
+            response = requests.post(
+                url,
+                headers=self.headers,
+                json={"timeout": timeout_minutes, "dry_run": dry_run},
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json().get("workspaces_culled", [])
+        except Exception:
+            return []
+
 
 def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     """List all resources and their idle times."""
@@ -281,6 +299,7 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
     results = {
         "kernels_culled": [],
         "terminals_culled": [],
+        "workspaces_culled": [],
         "dry_run": args.dry_run,
     }
 
@@ -304,8 +323,9 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
                 success = client.terminate_terminal(t["name"])
                 results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "culled" if success else "failed"})
 
-    # Note: Workspace culling is handled by the backend only (requires file system access)
-    # The CLI can list workspaces but culling is done via the periodic culler
+    # Cull idle workspaces via backend
+    workspaces_culled = client.cull_workspaces(args.workspace_timeout, args.dry_run)
+    results["workspaces_culled"] = workspaces_culled
 
     if args.json:
         print(json.dumps(results, indent=2))
@@ -328,7 +348,12 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
     else:
         print(f"{prefix}No terminals to cull")
 
-    print(f"\nNote: Workspace culling is handled by the backend culler (requires file system access)")
+    if results["workspaces_culled"]:
+        print(f"{prefix}Workspaces culled:")
+        for w in results["workspaces_culled"]:
+            print(f"  {w['id']}  idle: {w['idle_time']}  ({w['action']})")
+    else:
+        print(f"{prefix}No workspaces to cull")
 
     return 0
 
@@ -345,15 +370,16 @@ Environment variables:
   JUPYTER_TOKEN         Jupyter server authentication token
 
 Examples:
-  %(prog)s list                     List all resources and idle times
-  %(prog)s list --json              List as JSON
-  %(prog)s cull --dry-run           Show what would be culled
-  %(prog)s cull                     Cull idle resources
-  %(prog)s cull --kernel-timeout 30 Cull kernels idle > 30 minutes
+  %(prog)s list                       List all resources and idle times
+  %(prog)s list --json                List as JSON
+  %(prog)s cull --dry-run             Show what would be culled
+  %(prog)s cull                       Cull idle resources
+  %(prog)s cull --json                Cull and output as JSON
+  %(prog)s cull --kernel-timeout 30   Cull kernels idle > 30 minutes
+  %(prog)s cull --workspace-timeout 1 Cull workspaces idle > 1 minute
 """,
     )
 
-    parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--server-url", help="Jupyter server URL (overrides JUPYTER_SERVER_URL)")
     parser.add_argument("--token", help="Jupyter server token (overrides JUPYTER_TOKEN)")
 
@@ -361,13 +387,16 @@ Examples:
 
     # list command
     list_parser = subparsers.add_parser("list", help="List all resources and their idle times")
+    list_parser.add_argument("--json", action="store_true", help="Output as JSON")
     list_parser.set_defaults(func=cmd_list)
 
     # cull command
     cull_parser = subparsers.add_parser("cull", help="Cull idle resources")
+    cull_parser.add_argument("--json", action="store_true", help="Output as JSON")
     cull_parser.add_argument("--dry-run", action="store_true", help="Simulate culling without actually terminating")
     cull_parser.add_argument("--kernel-timeout", type=int, default=60, metavar="MIN", help="Kernel idle timeout in minutes (default: 60)")
     cull_parser.add_argument("--terminal-timeout", type=int, default=60, metavar="MIN", help="Terminal idle timeout in minutes (default: 60)")
+    cull_parser.add_argument("--workspace-timeout", type=int, default=10080, metavar="MIN", help="Workspace idle timeout in minutes (default: 10080 = 7 days)")
     cull_parser.set_defaults(func=cmd_cull)
 
     args = parser.parse_args(argv)

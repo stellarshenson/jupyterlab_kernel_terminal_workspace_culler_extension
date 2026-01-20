@@ -398,3 +398,102 @@ class ResourceCuller:
                 logger.error(f"[Culler] Failed to cull workspace {workspace_id}: {e}")
 
         return culled
+
+    def cull_workspaces_with_timeout(
+        self, timeout_minutes: int, dry_run: bool = False
+    ) -> list[dict[str, Any]]:
+        """Cull workspaces with specified timeout (for CLI use).
+
+        Args:
+            timeout_minutes: Idle timeout in minutes
+            dry_run: If True, return what would be culled without actually culling
+
+        Returns:
+            List of workspace dicts with id, idle_time, and action
+        """
+        result: list[dict[str, Any]] = []
+        now = datetime.now(timezone.utc)
+        timeout_seconds = timeout_minutes * 60
+
+        ws_mgr = self.workspace_manager
+        if ws_mgr is None:
+            logger.warning("[Culler] Workspace manager not available")
+            return result
+
+        try:
+            workspaces = list(ws_mgr.list_workspaces())
+        except Exception as e:
+            logger.error(f"[Culler] Failed to list workspaces: {e}")
+            return result
+
+        for workspace in workspaces:
+            try:
+                metadata = workspace.get("metadata", {})
+                workspace_id = metadata.get("id")
+                if workspace_id is None:
+                    continue
+
+                # Never cull the default workspace
+                if workspace_id == "default":
+                    continue
+
+                last_modified = metadata.get("last_modified")
+                if last_modified is None:
+                    continue
+
+                # Parse datetime if string
+                if isinstance(last_modified, str):
+                    last_modified = datetime.fromisoformat(
+                        last_modified.replace("Z", "+00:00")
+                    )
+
+                # Ensure timezone-aware comparison
+                if last_modified.tzinfo is None:
+                    last_modified = last_modified.replace(tzinfo=timezone.utc)
+
+                idle_seconds = (now - last_modified).total_seconds()
+                idle_minutes = idle_seconds / 60
+
+                if idle_seconds > timeout_seconds:
+                    if dry_run:
+                        # Format idle time for display
+                        if idle_seconds < 3600:
+                            idle_time = f"{idle_minutes:.1f}m"
+                        elif idle_seconds < 86400:
+                            idle_time = f"{idle_seconds / 3600:.1f}h"
+                        else:
+                            idle_time = f"{idle_seconds / 86400:.1f}d"
+                        result.append({
+                            "id": workspace_id,
+                            "idle_time": idle_time,
+                            "action": "would_cull",
+                        })
+                    else:
+                        logger.info(
+                            f"[Culler] CLI CULLING WORKSPACE {workspace_id} - "
+                            f"idle {idle_minutes:.1f} minutes (threshold: {timeout_minutes})"
+                        )
+                        ws_mgr.delete(workspace_id)
+                        logger.info(f"[Culler] Workspace {workspace_id} culled successfully")
+                        # Format idle time for display
+                        if idle_seconds < 3600:
+                            idle_time = f"{idle_minutes:.1f}m"
+                        elif idle_seconds < 86400:
+                            idle_time = f"{idle_seconds / 3600:.1f}h"
+                        else:
+                            idle_time = f"{idle_seconds / 86400:.1f}d"
+                        result.append({
+                            "id": workspace_id,
+                            "idle_time": idle_time,
+                            "action": "culled",
+                        })
+
+            except Exception as e:
+                logger.error(f"[Culler] Failed to cull workspace {workspace_id}: {e}")
+                result.append({
+                    "id": workspace_id,
+                    "idle_time": "unknown",
+                    "action": "failed",
+                })
+
+        return result

@@ -132,6 +132,31 @@ class WorkspacesHandler(APIHandler):
         self.finish(json.dumps(_culler.list_workspaces()))
 
 
+class CullWorkspacesHandler(APIHandler):
+    """Handler for culling workspaces via CLI."""
+
+    @tornado.web.authenticated
+    def post(self) -> None:
+        """Cull workspaces based on timeout parameter."""
+        if _culler is None:
+            self.set_status(503)
+            self.finish(json.dumps({"error": "Culler not initialized"}))
+            return
+
+        try:
+            data = json.loads(self.request.body)
+            timeout_minutes = data.get("timeout", 10080)  # default 7 days
+            dry_run = data.get("dry_run", False)
+            culled = _culler.cull_workspaces_with_timeout(timeout_minutes, dry_run)
+            self.finish(json.dumps({"workspaces_culled": culled}))
+        except json.JSONDecodeError:
+            self.set_status(400)
+            self.finish(json.dumps({"error": "Invalid JSON"}))
+        except Exception as e:
+            self.set_status(500)
+            self.finish(json.dumps({"error": str(e)}))
+
+
 def setup_route_handlers(web_app: tornado.web.Application) -> None:
     """Set up route handlers for the extension."""
     host_pattern = ".*$"
@@ -145,6 +170,7 @@ def setup_route_handlers(web_app: tornado.web.Application) -> None:
         (url_path_join(base_url, namespace, "terminals-connection"), TerminalsConnectionHandler),
         (url_path_join(base_url, namespace, "active-terminals"), ActiveTerminalsHandler),
         (url_path_join(base_url, namespace, "workspaces"), WorkspacesHandler),
+        (url_path_join(base_url, namespace, "cull-workspaces"), CullWorkspacesHandler),
     ]
 
     web_app.add_handlers(host_pattern, handlers)
