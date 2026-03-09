@@ -102,7 +102,7 @@ async function pollCullResults(app: JupyterFrontEnd): Promise<void> {
       showNotifications &&
       (kernelCount > 0 || terminalCount > 0 || workspaceCount > 0)
     ) {
-      const lines: string[] = ['Idle resources culled:'];
+      const lines: string[] = ['Idle resources released:'];
       if (kernelCount > 0) {
         lines.push(`Kernels: ${kernelCount}`);
       }
