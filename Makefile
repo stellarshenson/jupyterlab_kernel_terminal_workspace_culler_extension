@@ -1,4 +1,9 @@
-# Makefile for Jupyterlab extensions version 1.27
+# Makefile for Jupyterlab extensions version 1.31
+# changelog:
+#   1.31 - mrproper now removes ui-tests/node_modules (Playwright browser binaries)
+#   1.30 - check twine in check_dependencies, ensure publish doesn't fail on missing twine
+#   1.29 - replace yarn with jlpm, add prettier format, auto-commit and push after publish
+#   1.28 - initial versioned Makefile
 # author: Stellars Henson <konrad.jelen@gmail.com>
 # License: MIT Open Source License
 
@@ -21,7 +26,8 @@ increment_version:
 ## build packages
 build: clean increment_version check_dependencies
 	npm install
-	yarn install
+	jlpm install
+	npx prettier --write package-lock.json package.json
 	python -m build
 
 ## install package
@@ -48,8 +54,7 @@ check_dependencies:
 	@MISSING=""; \
 	command -v node >/dev/null 2>&1 || MISSING="$$MISSING node"; \
 	command -v npm >/dev/null 2>&1 || MISSING="$$MISSING npm"; \
-	command -v yarn >/dev/null 2>&1 || MISSING="$$MISSING yarn"; \
-	command -v twine >/dev/null 2>&1 || MISSING="$$MISSING twine"; \
+	python -m twine --version >/dev/null 2>&1 || MISSING="$$MISSING twine"; \
 	if [ -n "$$MISSING" ]; then \
 		echo "Missing dependencies:$$MISSING"; \
 		echo "Installing missing dependencies..."; \
@@ -61,13 +66,16 @@ check_dependencies:
 ## publish package to public repository
 publish: check_dependencies install
 	npm publish --access public
-	twine upload dist/*
+	python -m twine upload dist/*
+	git add package.json package-lock.json
+	git commit -m "chore: post-publish $$(node -p "require('./package.json').version") package metadata"
+	git push
 
 ## install all required build dependencies
 install_dependencies:
-	conda install -y nodejs yarn --update-all
-	pip install twine
-	npm install rimraf
+	pip install nodeenv twine
+	nodeenv --node=lts --prebuilt -p
+	npm install -g yarn rimraf
 
 ## upgrade all npm and yarn dependencies
 upgrade: check_dependencies
@@ -75,7 +83,7 @@ upgrade: check_dependencies
 
 ## cleanup all build and metabuild artefacts
 mrproper: clean uninstall
-	rm -rf node_modules .yarn || true
+	rm -rf node_modules .yarn ui-tests/node_modules || true
 
 ## prints the list of available commands
 help:
