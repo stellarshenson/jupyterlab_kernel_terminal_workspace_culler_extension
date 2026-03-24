@@ -13,6 +13,8 @@
 
 Automatically cull idle kernels, terminals, and workspaces after configurable timeout periods. Helps manage system resources by cleaning up unused resources that accumulate during long JupyterLab usage.
 
+![Resource Culler Screenshot](.resources/screenshot-culler.png)
+
 ## Features
 
 - **Idle kernel culling** - Shut down kernels idle beyond timeout (checks `execution_state` and `last_activity`)

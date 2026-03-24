@@ -1,0 +1,141 @@
+<!--
+  article_terminal_tracking.svg - WebSocket problem and frontend reporting solution
+  Shows: left panel (problem - backend can't detect tab close), right panel (solution - frontend reports)
+  Intent: visualize the key technical challenge described in the article
+  Theme: Stellars-Tech KGF - #0096d1 (teal), #da8230 (orange)
+-->
+<!--
+  === GRID ===
+  ViewBox: 800 x 280
+
+  Columns:
+    col-left-panel:   x=12..380  (problem, orange accent)
+    col-divider:      x=380..420 (40px gap, vertical divider at x=400)
+    col-right-panel:  x=420..788 (solution, teal accent)
+
+  Rows:
+    title:     y=14
+    panel-top: y=34
+    panel-bot: y=252
+    legend:    y=268
+
+  Panel internal:
+    label:     y=48
+    browser:   y=62..118
+    arrow:     y=118..140
+    server:    y=140..210
+    result:    y=218..246
+-->
+<!--
+  === LAYOUT TOPOLOGY ===
+  h-stack: [problem-panel] | divider | [solution-panel]
+  each panel: v-stack [browser-box] -> arrow -> [server-box] -> [result-box]
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280">
+  <defs>
+    <style>
+      .fg-1 { fill: #1a5a6e; }
+      .fg-2 { fill: #24697e; }
+      .fg-3 { fill: #236a74; }
+      .fg-4 { fill: #2b7680; }
+      .accent-1 { fill: #005f7a; }
+      .accent-2 { fill: #7a4a15; }
+      @media (prefers-color-scheme: dark) {
+        .fg-1 { fill: #b8e4f0; }
+        .fg-2 { fill: #8fd4e6; }
+        .fg-3 { fill: #5aafc5; }
+        .fg-4 { fill: #4099b3; }
+        .accent-1 { fill: #5cc8e0; }
+        .accent-2 { fill: #d4a04a; }
+      }
+    </style>
+  </defs>
+
+  <g id="guide-grid" display="none">
+    <line x1="400" y1="0" x2="400" y2="280" stroke="red" stroke-width="0.5"/>
+  </g>
+
+  <!-- Title -->
+  <text x="400" y="14" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="600" class="fg-2" text-anchor="middle" letter-spacing="1">TERMINAL TAB DETECTION</text>
+
+  <!-- ================================================================ -->
+  <!-- LEFT PANEL: THE PROBLEM (orange) -->
+  <!-- ================================================================ -->
+  <text x="196" y="44" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="600" class="accent-2" text-anchor="middle" letter-spacing="1">THE PROBLEM</text>
+
+  <!-- Browser box (tab closed) -->
+  <g id="problem-browser">
+    <path d="M40,58 H352 V114 Q352,117 349,117 H43 Q40,117 40,114 Z" fill="#da8230" fill-opacity="0.04"/>
+    <path d="M40,58 H352 V114 Q352,117 349,117 H43 Q40,117 40,114 Z" fill="none" stroke="#da8230" stroke-width="1"/>
+    <rect x="40" y="58" width="312" height="5" fill="#da8230" opacity="0.6"/>
+    <text x="196" y="80" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Browser Tab Closed</text>
+    <text x="196" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">User closed terminal tab in JupyterLab</text>
+    <text x="196" y="110" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">but WebSocket connection stays alive</text>
+  </g>
+
+  <!-- Arrow down (problem: WebSocket persists) -->
+  <g transform="translate(196, 140) rotate(90)">
+    <line x1="-23" y1="0" x2="-10" y2="0" stroke="#da8230" stroke-width="1.2"/>
+    <polygon points="0,0 -10,-4 -10,4" fill="#da8230"/>
+  </g>
+  <text x="248" y="134" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="accent-2">WS stays open!</text>
+
+  <!-- Server box (Terminado) -->
+  <g id="problem-server">
+    <path d="M40,144 H352 V210 Q352,213 349,213 H43 Q40,213 40,210 Z" fill="#da8230" fill-opacity="0.04"/>
+    <path d="M40,144 H352 V210 Q352,213 349,213 H43 Q40,213 40,210 Z" fill="none" stroke="#da8230" stroke-width="1"/>
+    <rect x="40" y="144" width="312" height="5" fill="#da8230" opacity="0.6"/>
+    <text x="196" y="166" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Terminado Server</text>
+    <text x="196" y="182" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">term.clients = [client] (always populated)</text>
+    <text x="196" y="196" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">stream.closed() = False (always open)</text>
+  </g>
+
+  <!-- Result: wrong -->
+  <rect x="108" y="222" width="176" height="26" rx="4" fill="#da8230" fill-opacity="0.12" stroke="#da8230" stroke-width="0.8"/>
+  <text x="196" y="240" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="accent-2" text-anchor="middle">Result: "connected" (wrong)</text>
+
+  <!-- ================================================================ -->
+  <!-- VERTICAL DIVIDER -->
+  <!-- ================================================================ -->
+  <line x1="400" y1="34" x2="400" y2="252" stroke="#0096d1" stroke-width="0.5" opacity="0.15"/>
+
+  <!-- ================================================================ -->
+  <!-- RIGHT PANEL: THE SOLUTION (teal) -->
+  <!-- ================================================================ -->
+  <text x="604" y="44" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="600" class="accent-1" text-anchor="middle" letter-spacing="1">THE SOLUTION</text>
+
+  <!-- Browser box (ITerminalTracker) -->
+  <g id="solution-browser">
+    <path d="M448,58 H760 V114 Q760,117 757,117 H451 Q448,117 448,114 Z" fill="#0096d1" fill-opacity="0.04"/>
+    <path d="M448,58 H760 V114 Q760,117 757,117 H451 Q448,117 448,114 Z" fill="none" stroke="#0096d1" stroke-width="1"/>
+    <rect x="448" y="58" width="312" height="5" fill="#0096d1" opacity="0.6"/>
+    <text x="604" y="80" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Frontend: ITerminalTracker</text>
+    <text x="604" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">Iterates widgets: isAttached + !isDisposed</text>
+    <text x="604" y="110" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">Reports on signal change + periodic backup</text>
+  </g>
+
+  <!-- Arrow down (solution: POST report) -->
+  <g transform="translate(604, 140) rotate(90)">
+    <line x1="-23" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+    <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+  </g>
+  <text x="656" y="134" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="accent-1">POST /active-terminals</text>
+
+  <!-- Server box (backend state) -->
+  <g id="solution-server">
+    <path d="M448,144 H760 V210 Q760,213 757,213 H451 Q448,213 448,210 Z" fill="#0096d1" fill-opacity="0.04"/>
+    <path d="M448,144 H760 V210 Q760,213 757,213 H451 Q448,213 448,210 Z" fill="none" stroke="#0096d1" stroke-width="1"/>
+    <rect x="448" y="144" width="312" height="5" fill="#0096d1" opacity="0.6"/>
+    <text x="604" y="166" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Backend: _active_terminals</text>
+    <text x="604" y="182" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">set[str] updated from frontend reports</text>
+    <text x="604" y="196" font-family="Segoe UI, Arial, sans-serif" font-size="9" class="fg-3" text-anchor="middle">name in _active_terminals -> skip culling</text>
+  </g>
+
+  <!-- Result: correct -->
+  <rect x="516" y="222" width="176" height="26" rx="4" fill="#0096d1" fill-opacity="0.12" stroke="#0096d1" stroke-width="0.8"/>
+  <text x="604" y="240" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="accent-1" text-anchor="middle">Result: accurate detection</text>
+
+  <!-- Legend -->
+  <text x="12" y="270" font-family="Segoe UI, Arial, sans-serif" font-size="7" class="fg-4">Backend cannot detect tab state via WebSocket - only the frontend knows which terminal widgets are open</text>
+
+</svg>

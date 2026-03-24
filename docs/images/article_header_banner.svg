@@ -1,0 +1,99 @@
+<!--
+  header_banner.svg - Article header banner for JupyterLab Resource Culler
+  Theme: Stellars-Tech KGF - teal/cyan primary (#0096d1), orange accent (#da8230)
+  Card shape: flat top, rounded bottom r=3
+  Supports: light and dark mode via CSS prefers-color-scheme
+-->
+<!--
+  GRID REFERENCE
+  ViewBox: 800 x 120
+  Text column:  x=40..560, y=35..105
+  Icon cluster: x=620..780, y=28..108
+  Accent bar:   x=0..800,  y=113..118
+-->
+<!--
+  LAYOUT TOPOLOGY
+  [text-block] left-anchored, stacked vertically
+  [icon-cluster] right-side decorative group, opacity=0.35
+  [accent-bar] gradient stripe pinned to bottom
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 120">
+  <defs>
+    <linearGradient id="hb_accent_bar" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0"   stop-color="#0096d1"/>
+      <stop offset="0.6" stop-color="#0096d1"/>
+      <stop offset="1"   stop-color="#da8230"/>
+    </linearGradient>
+    <style>
+      .fg-1 { fill: #1a5a6e; }
+      .fg-2 { fill: #24697e; }
+      .fg-3 { fill: #236a74; }
+      .fg-4 { fill: #2b7680; }
+      .accent-1 { fill: #005f7a; }
+      .accent-2 { fill: #7a4a15; }
+      @media (prefers-color-scheme: dark) {
+        .fg-1 { fill: #b8e4f0; }
+        .fg-2 { fill: #8fd4e6; }
+        .fg-3 { fill: #5aafc5; }
+        .fg-4 { fill: #4099b3; }
+        .accent-1 { fill: #5cc8e0; }
+        .accent-2 { fill: #d4a04a; }
+      }
+    </style>
+  </defs>
+
+  <!-- guide-grid: layout reference, hidden in render -->
+  <g id="guide-grid" display="none">
+    <line x1="40"  y1="0" x2="40"  y2="120" stroke="red" stroke-width="0.5"/>
+    <line x1="560" y1="0" x2="560" y2="120" stroke="red" stroke-width="0.5"/>
+    <line x1="620" y1="0" x2="620" y2="120" stroke="red" stroke-width="0.5"/>
+    <line x1="0" y1="35"  x2="800" y2="35"  stroke="red" stroke-width="0.5"/>
+    <line x1="0" y1="113" x2="800" y2="113" stroke="red" stroke-width="0.5"/>
+  </g>
+
+  <!-- Title -->
+  <text x="40" y="38" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" class="fg-1">JupyterLab Resource Culler</text>
+
+  <!-- Subtitle -->
+  <text x="40" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" class="fg-2">Automatic cleanup for idle kernels, terminals, and workspaces</text>
+
+  <!-- Description -->
+  <text x="40" y="76" font-family="Segoe UI, Arial, sans-serif" font-size="11" class="fg-3">Server-side extension with frontend settings sync and smart terminal tab detection</text>
+
+  <!-- Meta -->
+  <text x="40" y="94" font-family="Segoe UI, Arial, sans-serif" font-size="10" class="fg-4">JupyterLab 4.x | TypeScript + Python | v1.0.22</text>
+
+  <!-- Decorative icon cluster (right side), opacity group on structural elements only -->
+  <g id="icon-cluster" opacity="0.35">
+    <!-- Kernel icon: outer ring + inner filled dot -->
+    <circle cx="648" cy="48" r="14" fill="none" stroke="#0096d1" stroke-width="1.8"/>
+    <circle cx="648" cy="48" r="5"  fill="#0096d1" opacity="0.4"/>
+
+    <!-- Terminal icon: rounded rect + $_ label -->
+    <rect x="686" y="30" width="28" height="20" rx="3" fill="none" stroke="#0096d1" stroke-width="1.4"/>
+    <!-- Terminal prompt as decorative lines (avoids text inside opacity group) -->
+    <line x1="692" y1="42" x2="695" y2="42" stroke="#0096d1" stroke-width="1.2"/>
+    <line x1="695" y1="39" x2="695" y2="45" stroke="#0096d1" stroke-width="1.2"/>
+    <line x1="697" y1="45" x2="702" y2="45" stroke="#0096d1" stroke-width="1.2"/>
+
+    <!-- Workspace icon: grid window -->
+    <rect x="734" y="56" width="26" height="20" rx="2" fill="none" stroke="#da8230" stroke-width="1.4"/>
+    <line x1="734" y1="64" x2="760" y2="64" stroke="#da8230" stroke-width="1"/>
+    <line x1="747" y1="56" x2="747" y2="76" stroke="#da8230" stroke-width="1"/>
+
+    <!-- Timer/clock -->
+    <circle cx="700" cy="88" r="11" fill="none" stroke="#da8230" stroke-width="1.2"/>
+    <line x1="700" y1="80" x2="700" y2="88" stroke="#da8230" stroke-width="1.2"/>
+    <line x1="700" y1="88" x2="706" y2="92" stroke="#da8230" stroke-width="1.2"/>
+
+    <!-- Connector lines -->
+    <line x1="662" y1="48" x2="686" y2="40" stroke="#0096d1" stroke-width="0.9"/>
+    <line x1="662" y1="58" x2="734" y2="65" stroke="#da8230" stroke-width="0.9"/>
+    <line x1="714" y1="40" x2="736" y2="56" stroke="#0096d1" stroke-width="0.7"/>
+    <line x1="660" y1="55" x2="692" y2="78" stroke="#da8230" stroke-width="0.7"/>
+  </g>
+
+  <!-- Bottom accent gradient bar -->
+  <rect x="0" y="113" width="800" height="5" fill="url(#hb_accent_bar)" opacity="0.6"/>
+
+</svg>

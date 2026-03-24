@@ -1,0 +1,254 @@
+<!--
+  culling_flow.svg - Culling decision flow for kernels, terminals, and workspaces
+  Shows: 3 parallel decision rows triggered by PeriodicCallback, converging to Notification
+  Intent: visualize per-resource decision chain with protection rules
+  Theme: Stellars-Tech KGF - #0096d1 (teal), #da8230 (orange)
+-->
+<!--
+  === GRID ===
+  ViewBox: 800 x 226
+
+  Columns (30px uniform gaps, 40px fanout zone):
+    col-trigger:  cx=26, r=14, right=40
+    col-fanout:   x=40..80  (40px: paths to x=60, arrows 60..80)
+    col-card:     x=80..186  (w=106)
+    col-gap1:     x=186..216 (30px)
+    col-skip:     x=216..294 (w=78)
+    col-gap2:     x=294..324 (30px)
+    col-timeout:  x=324..424 (w=100)
+    col-gap3:     x=424..454 (30px)
+    col-action:   x=454..556 (w=102)
+    col-merge:    x=556..578 (stubs + spine at 578)
+    col-gap4:     x=578..608 (30px)
+    col-notify:   x=608..766 (w=158)
+    right-margin: 34px
+
+  Rows (stride 58: card 52px + 6px gap):
+    Row 1: y=28..80,   cy=54
+    Row 2: y=86..138,  cy=112
+    Row 3: y=144..196, cy=170
+
+  Fanout arrows: tip at (80,cy), stem x1=-20 x2=-10 (10px stem + 10px head)
+  Inter-block arrows: tip at target left, stem x1=-30 x2=-10 (20px stem + 10px head)
+  Merge spine arrow: tip at (608,112), stem x1=-30 x2=-10
+  Legend: y=214
+-->
+<!--
+  === LAYOUT TOPOLOGY ===
+  [trigger] fan-out to [kernel-row], [terminal-row], [workspace-row]
+  each row: h-stack [card] -> [skip-box] -> [timeout-box] -> [action-box]
+  three rows merge-stubs -> spine -> [notification-card]
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 226">
+  <defs>
+    <style>
+      .fg-1 { fill: #1a5a6e; }
+      .fg-2 { fill: #24697e; }
+      .fg-3 { fill: #236a74; }
+      .fg-4 { fill: #2b7680; }
+      .accent-1 { fill: #005f7a; }
+      .accent-2 { fill: #7a4a15; }
+      @media (prefers-color-scheme: dark) {
+        .fg-1 { fill: #b8e4f0; }
+        .fg-2 { fill: #8fd4e6; }
+        .fg-3 { fill: #5aafc5; }
+        .fg-4 { fill: #4099b3; }
+        .accent-1 { fill: #5cc8e0; }
+        .accent-2 { fill: #d4a04a; }
+      }
+    </style>
+  </defs>
+
+  <g id="guide-grid" display="none">
+    <line x1="80"  y1="0" x2="80"  y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="186" y1="0" x2="186" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="216" y1="0" x2="216" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="294" y1="0" x2="294" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="324" y1="0" x2="324" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="424" y1="0" x2="424" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="454" y1="0" x2="454" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="556" y1="0" x2="556" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="578" y1="0" x2="578" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="608" y1="0" x2="608" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="766" y1="0" x2="766" y2="226" stroke="red" stroke-width="0.5"/>
+    <line x1="0" y1="54"  x2="800" y2="54"  stroke="blue" stroke-width="0.5"/>
+    <line x1="0" y1="112" x2="800" y2="112" stroke="blue" stroke-width="0.5"/>
+    <line x1="0" y1="170" x2="800" y2="170" stroke="blue" stroke-width="0.5"/>
+  </g>
+
+  <!-- Title -->
+  <text x="400" y="14" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="600" class="fg-2" text-anchor="middle" letter-spacing="1">CULLING DECISION FLOW</text>
+
+  <!-- ================================================================ -->
+  <!-- TRIGGER (cx=26, cy=112, r=14) -->
+  <!-- ================================================================ -->
+  <g id="trigger">
+    <circle cx="26" cy="112" r="14" fill="#0096d1" fill-opacity="0.08" stroke="#0096d1" stroke-width="1.5"/>
+    <text x="26" y="109" font-family="Segoe UI, Arial, sans-serif" font-size="7" font-weight="600" class="fg-1" text-anchor="middle">Every</text>
+    <text x="26" y="118" font-family="Segoe UI, Arial, sans-serif" font-size="7" font-weight="600" class="fg-1" text-anchor="middle">5 min</text>
+  </g>
+
+  <!-- Fan-out: chamfered L-routes from trigger (right=40) to arrow stems ending at x=60,
+       then arrows with 10px stem (60..70) + 10px head (70..80), tip at (80,cy) -->
+
+  <!-- To kernels (cy=54): L up -->
+  <path d="M40,100 L44,96 V58 L48,54 H60" fill="none" stroke="#0096d1" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(80, 54) rotate(0)">
+    <line x1="-20" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+    <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+  </g>
+
+  <!-- To terminals (cy=112): straight -->
+  <line x1="40" y1="112" x2="60" y2="112" stroke="#0096d1" stroke-width="1.2"/>
+  <g transform="translate(80, 112) rotate(0)">
+    <line x1="-20" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+    <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+  </g>
+
+  <!-- To workspaces (cy=170): L down -->
+  <path d="M40,124 L44,128 V166 L48,170 H60" fill="none" stroke="#0096d1" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(80, 170) rotate(0)">
+    <line x1="-20" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+    <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- ROW 1: KERNELS (teal, y=28..80, cy=54) -->
+  <!-- ================================================================ -->
+  <g id="kernel-row">
+    <path d="M80,28 H186 V77 Q186,80 183,80 H83 Q80,80 80,77 Z" fill="#0096d1" fill-opacity="0.04"/>
+    <path d="M80,28 H186 V77 Q186,80 183,80 H83 Q80,80 80,77 Z" fill="none" stroke="#0096d1" stroke-width="1"/>
+    <rect x="80" y="28" width="106" height="5" fill="#0096d1" opacity="0.6"/>
+    <text x="133" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Kernels</text>
+    <text x="133" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">execution_state</text>
+    <text x="133" y="70" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">last_activity</text>
+
+    <g transform="translate(216, 54) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+    </g>
+
+    <rect x="216" y="40" width="78" height="28" rx="4" fill="#0096d1" fill-opacity="0.08" stroke="#0096d1" stroke-width="0.8"/>
+    <text x="255" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="fg-1" text-anchor="middle">busy? skip</text>
+
+    <g transform="translate(324, 54) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+    </g>
+
+    <rect x="324" y="40" width="100" height="28" rx="4" fill="#0096d1" fill-opacity="0.08" stroke="#0096d1" stroke-width="0.8"/>
+    <text x="374" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="fg-1" text-anchor="middle">idle > timeout?</text>
+
+    <g transform="translate(454, 54) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#da8230" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#da8230"/>
+    </g>
+
+    <rect x="454" y="40" width="102" height="28" rx="4" fill="#da8230" fill-opacity="0.08" stroke="#da8230" stroke-width="0.8"/>
+    <text x="505" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="8" font-weight="600" class="accent-2" text-anchor="middle">shutdown_kernel()</text>
+
+    <path d="M556,54 H574 L578,58" fill="none" stroke="#0096d1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- ROW 2: TERMINALS (orange, y=86..138, cy=112) -->
+  <!-- ================================================================ -->
+  <g id="terminal-row">
+    <path d="M80,86 H186 V135 Q186,138 183,138 H83 Q80,138 80,135 Z" fill="#da8230" fill-opacity="0.04"/>
+    <path d="M80,86 H186 V135 Q186,138 183,138 H83 Q80,138 80,135 Z" fill="none" stroke="#da8230" stroke-width="1"/>
+    <rect x="80" y="86" width="106" height="5" fill="#da8230" opacity="0.6"/>
+    <text x="133" y="104" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Terminals</text>
+    <text x="133" y="116" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">last_activity</text>
+    <text x="133" y="128" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">active tab check</text>
+
+    <g transform="translate(216, 112) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#da8230" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#da8230"/>
+    </g>
+
+    <rect x="216" y="98" width="78" height="28" rx="4" fill="#da8230" fill-opacity="0.08" stroke="#da8230" stroke-width="0.8"/>
+    <text x="255" y="116" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="fg-1" text-anchor="middle">tab open? skip</text>
+
+    <g transform="translate(324, 112) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#da8230" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#da8230"/>
+    </g>
+
+    <rect x="324" y="98" width="100" height="28" rx="4" fill="#da8230" fill-opacity="0.08" stroke="#da8230" stroke-width="0.8"/>
+    <text x="374" y="116" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="fg-1" text-anchor="middle">idle > timeout?</text>
+
+    <g transform="translate(454, 112) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#da8230" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#da8230"/>
+    </g>
+
+    <rect x="454" y="98" width="102" height="28" rx="4" fill="#da8230" fill-opacity="0.08" stroke="#da8230" stroke-width="0.8"/>
+    <text x="505" y="116" font-family="Segoe UI, Arial, sans-serif" font-size="8" font-weight="600" class="accent-2" text-anchor="middle">terminate() SIGHUP</text>
+
+    <line x1="556" y1="112" x2="578" y2="112" stroke="#0096d1" stroke-width="1"/>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- ROW 3: WORKSPACES (teal, y=144..196, cy=170) -->
+  <!-- ================================================================ -->
+  <g id="workspace-row">
+    <path d="M80,144 H186 V193 Q186,196 183,196 H83 Q80,196 80,193 Z" fill="#0096d1" fill-opacity="0.04"/>
+    <path d="M80,144 H186 V193 Q186,196 183,196 H83 Q80,196 80,193 Z" fill="none" stroke="#0096d1" stroke-width="1"/>
+    <rect x="80" y="144" width="106" height="5" fill="#0096d1" opacity="0.6"/>
+    <text x="133" y="162" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Workspaces</text>
+    <text x="133" y="174" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">last_modified</text>
+    <text x="133" y="186" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">file timestamp</text>
+
+    <g transform="translate(216, 170) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+    </g>
+
+    <rect x="216" y="156" width="78" height="28" rx="4" fill="#0096d1" fill-opacity="0.08" stroke="#0096d1" stroke-width="0.8"/>
+    <text x="255" y="174" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="fg-1" text-anchor="middle">default? skip</text>
+
+    <g transform="translate(324, 170) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+    </g>
+
+    <rect x="324" y="156" width="100" height="28" rx="4" fill="#0096d1" fill-opacity="0.08" stroke="#0096d1" stroke-width="0.8"/>
+    <text x="374" y="174" font-family="Segoe UI, Arial, sans-serif" font-size="9" font-weight="600" class="fg-1" text-anchor="middle">stale > 7 days?</text>
+
+    <g transform="translate(454, 170) rotate(0)">
+      <line x1="-30" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+      <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+    </g>
+
+    <rect x="454" y="156" width="102" height="28" rx="4" fill="#0096d1" fill-opacity="0.08" stroke="#0096d1" stroke-width="0.8"/>
+    <text x="505" y="174" font-family="Segoe UI, Arial, sans-serif" font-size="8" font-weight="600" class="accent-1" text-anchor="middle">delete workspace</text>
+
+    <path d="M556,170 H574 L578,166" fill="none" stroke="#0096d1" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- MERGE MANIFOLD -->
+  <!-- ================================================================ -->
+  <line x1="578" y1="58" x2="578" y2="166" stroke="#0096d1" stroke-width="1"/>
+
+  <g transform="translate(608, 112) rotate(0)">
+    <line x1="-30" y1="0" x2="-10" y2="0" stroke="#0096d1" stroke-width="1.2"/>
+    <polygon points="0,0 -10,-4 -10,4" fill="#0096d1"/>
+  </g>
+
+  <!-- ================================================================ -->
+  <!-- NOTIFICATION CARD: x=608..766 -->
+  <!-- ================================================================ -->
+  <g id="notification-card">
+    <path d="M608,84 H730 V137 Q730,140 727,140 H611 Q608,140 608,137 Z" fill="#0096d1" fill-opacity="0.04"/>
+    <path d="M608,84 H730 V137 Q730,140 727,140 H611 Q608,140 608,137 Z" fill="none" stroke="#0096d1" stroke-width="1"/>
+    <rect x="608" y="84" width="122" height="5" fill="#0096d1" opacity="0.6"/>
+    <text x="669" y="103" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" class="fg-1" text-anchor="middle">Notification</text>
+    <text x="669" y="117" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">"Idle resources released"</text>
+    <text x="669" y="131" font-family="Segoe UI, Arial, sans-serif" font-size="8" class="fg-3" text-anchor="middle">toast in JupyterLab UI</text>
+  </g>
+
+  <!-- Legend -->
+  <text x="12" y="214" font-family="Segoe UI, Arial, sans-serif" font-size="7" class="fg-4">Protected: busy kernels, terminals with open tabs, default workspace - never culled regardless of idle time</text>
+
+</svg>
