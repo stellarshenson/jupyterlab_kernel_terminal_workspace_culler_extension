@@ -1,12 +1,13 @@
 ---
 title: "Your JupyterLab Is Hoarding Dead Sessions. Here's How I Fixed It."
-subtitle: "Building a JupyterLab extension that automatically cleans up idle kernels, terminals, and workspaces - and why you should build one too."
-author: "Stellars Henson"
+subtitle: 'Building a JupyterLab extension that automatically cleans up idle kernels, terminals, and workspaces - and why you should build one too.'
+author: 'Stellars Henson'
 date: 2026-03-23
-tags: ["JupyterLab", "Python", "TypeScript", "Extensions", "DevOps", "Data Science"]
-canonical_url: ""
-publication: "Medium"
-read_time: "10 min read"
+tags:
+  ['JupyterLab', 'Python', 'TypeScript', 'Extensions', 'DevOps', 'Data Science']
+canonical_url: ''
+publication: 'Medium'
+read_time: '10 min read'
 ---
 
 # Your JupyterLab Is Hoarding Dead Sessions. Here's How I Fixed It.
@@ -133,11 +134,11 @@ Every check cycle, the culler runs through all three resource types. Each has it
 
 Default settings:
 
-| Resource   | Timeout | Protection |
-|-----------|---------|------------|
-| Kernels   | 60 min  | Busy kernels never culled |
-| Terminals | 60 min  | Open tabs never culled |
-| Workspaces | 7 days | Default workspace never culled |
+| Resource   | Timeout | Protection                     |
+| ---------- | ------- | ------------------------------ |
+| Kernels    | 60 min  | Busy kernels never culled      |
+| Terminals  | 60 min  | Open tabs never culled         |
+| Workspaces | 7 days  | Default workspace never culled |
 
 All timeouts are configurable through JupyterLab's standard Settings Editor. No config files to edit. Change a setting, and it takes effect on the next check cycle.
 
@@ -181,4 +182,4 @@ The resource culler started because I was tired of manually cleaning up idle ker
 
 ---
 
-*[jupyterlab_kernel_terminal_workspace_culler_extension](https://github.com/stellarshenson/jupyterlab_kernel_terminal_workspace_culler_extension) is open source under MIT license. It's also part of the [stellars_jupyterlab_extensions](https://github.com/stellarshenson/stellars_jupyterlab_extensions) metapackage. Issues and contributions welcome.*
+_[jupyterlab_kernel_terminal_workspace_culler_extension](https://github.com/stellarshenson/jupyterlab_kernel_terminal_workspace_culler_extension) is open source under MIT license. It's also part of the [stellars_jupyterlab_extensions](https://github.com/stellarshenson/stellars_jupyterlab_extensions) metapackage. Issues and contributions welcome._
