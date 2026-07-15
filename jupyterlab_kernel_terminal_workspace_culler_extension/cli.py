@@ -45,9 +45,15 @@ def get_jupyter_server_info() -> tuple[str, str | None]:
             timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
-            # Parse first server (one JSON object per line)
-            first_line = result.stdout.strip().split("\n")[0]
-            server_info = json.loads(first_line)
+            # One JSON object per line; use the first server
+            lines = result.stdout.strip().split("\n")
+            if len(lines) > 1:
+                print(
+                    f"Warning: {len(lines)} Jupyter servers detected; using the first. "
+                    "Pass --server-url to target a specific one.",
+                    file=sys.stderr,
+                )
+            server_info = json.loads(lines[0])
             port = server_info.get("port", 8888)
             base_url = server_info.get("base_url", "/").rstrip("/")
             # Use server token as fallback if no env token
@@ -314,8 +320,11 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
                 success = client.shutdown_kernel(k["id"])
                 results["kernels_culled"].append({"id": k["id"], "idle_time": k["idle_time"], "action": "culled" if success else "failed"})
 
-    # Cull idle terminals
+    # Cull idle terminals (skip those with an open browser tab unless --include-connected)
+    terminals_connection = {} if args.include_connected else client.get_terminals_connection()
     for t in terminals:
+        if not args.include_connected and terminals_connection.get(t["name"], False):
+            continue
         if t["idle_seconds"] > 0 and t["idle_seconds"] > terminal_timeout:
             if args.dry_run:
                 results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "would_cull"})
@@ -396,6 +405,7 @@ Examples:
     cull_parser.add_argument("--dry-run", action="store_true", help="Simulate culling without actually terminating")
     cull_parser.add_argument("--kernel-timeout", type=int, default=60, metavar="MIN", help="Kernel idle timeout in minutes (default: 60)")
     cull_parser.add_argument("--terminal-timeout", type=int, default=60, metavar="MIN", help="Terminal idle timeout in minutes (default: 60)")
+    cull_parser.add_argument("--include-connected", action="store_true", help="Also cull terminals with an open browser tab (default: skip connected terminals)")
     cull_parser.add_argument("--workspace-timeout", type=int, default=10080, metavar="MIN", help="Workspace idle timeout in minutes (default: 10080 = 7 days)")
     cull_parser.set_defaults(func=cmd_cull)
 

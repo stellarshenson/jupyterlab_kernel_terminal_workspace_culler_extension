@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.23] - 2026-07-15
+
+### Added
+
+- CLI `cull` skips terminals with an open browser tab by default; `--include-connected` culls them anyway
+- CLI warns when multiple Jupyter servers are detected during auto-discovery
+
+### Changed
+
+- Updated build Makefile to v1.34 (project-local nodeenv, prettier via jlpm)
+
+### Fixed
+
+- Per-client active-terminal tracking so a terminal open in one browser tab is no longer culled when another tab reports none
+- Workspace culling now targets only auto-generated workspaces (`auto-*`); named and default workspaces are always preserved
+- Workspaces directory resolved from the active Jupyter config dir instead of a hardcoded `~/.jupyter` path
+- Server-side clamp of culling timeouts and check interval to a minimum of 1 minute
+- Rewrote the drifted Python test suite to current behaviour (32 tests pass)
+
 <!-- <START NEW CHANGELOG ENTRY> -->
 
 ## 1.0.2

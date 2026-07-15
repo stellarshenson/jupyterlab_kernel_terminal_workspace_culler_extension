@@ -109,7 +109,8 @@ class ActiveTerminalsHandler(APIHandler):
         try:
             data = json.loads(self.request.body)
             terminals = data.get("terminals", [])
-            _culler.set_active_terminals(terminals)
+            client_id = data.get("clientId", "default")
+            _culler.set_active_terminals(terminals, client_id)
             self.finish(json.dumps({"status": "ok"}))
         except json.JSONDecodeError:
             self.set_status(400)

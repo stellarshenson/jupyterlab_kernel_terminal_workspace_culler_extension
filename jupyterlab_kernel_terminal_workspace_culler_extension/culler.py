@@ -35,8 +35,10 @@ class ResourceCuller:
         }
         self._result_consumed = True  # Track if frontend has fetched the result
 
-        # Active terminals reported by frontend (terminals with open tabs)
-        self._active_terminals: set[str] = set()
+        # Active terminals reported by frontend, keyed by client id -> (names, last report).
+        # Kept per-client and unioned so one client's report cannot clobber another's
+        # (a terminal open in any client is protected); stale clients expire (see TTL below).
+        self._active_terminals_by_client: dict[str, tuple[set[str], datetime]] = {}
 
         # Workspace manager (lazy initialization)
         self._workspace_manager: Any = None
@@ -59,10 +61,12 @@ class ResourceCuller:
         """Access the workspace manager from jupyterlab_server."""
         if self._workspace_manager is None:
             try:
+                from jupyter_core.paths import jupyter_config_dir
                 from jupyterlab_server.workspaces_handler import WorkspacesManager
 
-                # Get workspaces directory from jupyterlab settings
-                workspaces_dir = Path.home() / ".jupyter" / "lab" / "workspaces"
+                # Resolve the workspaces directory from the active jupyter config dir
+                # (honours JUPYTER_CONFIG_DIR) rather than assuming ~/.jupyter
+                workspaces_dir = Path(jupyter_config_dir()) / "lab" / "workspaces"
                 if workspaces_dir.exists():
                     self._workspace_manager = WorkspacesManager(str(workspaces_dir))
                 else:
@@ -80,19 +84,19 @@ class ResourceCuller:
         if "kernelCullEnabled" in settings:
             self._kernel_cull_enabled = settings["kernelCullEnabled"]
         if "kernelCullIdleTimeout" in settings:
-            self._kernel_cull_idle_timeout = settings["kernelCullIdleTimeout"]
+            self._kernel_cull_idle_timeout = max(1, settings["kernelCullIdleTimeout"])
         if "terminalCullEnabled" in settings:
             self._terminal_cull_enabled = settings["terminalCullEnabled"]
         if "terminalCullIdleTimeout" in settings:
-            self._terminal_cull_idle_timeout = settings["terminalCullIdleTimeout"]
+            self._terminal_cull_idle_timeout = max(1, settings["terminalCullIdleTimeout"])
         if "terminalCullDisconnectedOnly" in settings:
             self._terminal_cull_disconnected_only = settings["terminalCullDisconnectedOnly"]
         if "workspaceCullEnabled" in settings:
             self._workspace_cull_enabled = settings["workspaceCullEnabled"]
         if "workspaceCullIdleTimeout" in settings:
-            self._workspace_cull_idle_timeout = settings["workspaceCullIdleTimeout"]
+            self._workspace_cull_idle_timeout = max(1, settings["workspaceCullIdleTimeout"])
         if "cullCheckInterval" in settings:
-            new_interval = settings["cullCheckInterval"]
+            new_interval = max(1, settings["cullCheckInterval"])
             if new_interval != self._cull_check_interval:
                 self._cull_check_interval = new_interval
                 # Restart periodic callback with new interval
@@ -175,14 +179,44 @@ class ResourceCuller:
 
         return result
 
-    def set_active_terminals(self, terminals: list[str]) -> None:
-        """Update the set of terminals that have open tabs in the frontend."""
-        self._active_terminals = set(terminals)
-        logger.debug(f"[Culler] Active terminals updated: {self._active_terminals}")
+    # A live frontend re-reports every check interval; drop a client silent for
+    # this many intervals so a closed browser stops protecting its terminals.
+    # 3 (not 2) leaves a full interval of grace for a single dropped report.
+    _ACTIVE_TERMINAL_STALE_INTERVALS = 3
+
+    def set_active_terminals(
+        self, terminals: list[str], client_id: str = "default"
+    ) -> None:
+        """Record the terminals a given frontend client currently has open."""
+        self._active_terminals_by_client[client_id] = (
+            set(terminals),
+            datetime.now(timezone.utc),
+        )
+        logger.debug(f"[Culler] Active terminals for client {client_id}: {terminals}")
+
+    def _active_terminal_names(self) -> set[str]:
+        """Union of terminals reported open by any client with a recent report.
+
+        Entries from clients silent for more than ``_ACTIVE_TERMINAL_STALE_INTERVALS``
+        check intervals are pruned, so a closed browser tab no longer protects its
+        terminals from culling.
+        """
+        now = datetime.now(timezone.utc)
+        max_age = self._cull_check_interval * self._ACTIVE_TERMINAL_STALE_INTERVALS * 60
+        active: set[str] = set()
+        stale: list[str] = []
+        for client_id, (names, reported_at) in self._active_terminals_by_client.items():
+            if (now - reported_at).total_seconds() > max_age:
+                stale.append(client_id)
+                continue
+            active |= names
+        for client_id in stale:
+            del self._active_terminals_by_client[client_id]
+        return active
 
     def _terminal_has_active_tab(self, name: str) -> bool:
-        """Check if a terminal has an active tab in the frontend."""
-        return name in self._active_terminals
+        """Check if a terminal has an active tab in any recent frontend client."""
+        return name in self._active_terminal_names()
 
     def list_workspaces(self) -> list[dict[str, Any]]:
         """Return list of workspaces with their metadata."""
@@ -339,6 +373,15 @@ class ResourceCuller:
 
         return culled
 
+    @staticmethod
+    def _is_cullable_workspace(workspace_id: str) -> bool:
+        """Only auto-generated workspaces (auto-0, auto-k, ...) are cull-eligible.
+
+        Named workspaces and the default/primary layout are always protected. A
+        leading slash (some clients store the id as ``/auto-0``) is normalized.
+        """
+        return workspace_id.lstrip("/").startswith("auto-")
+
     def _cull_workspaces(self) -> list[str]:
         """Cull idle workspaces exceeding timeout threshold."""
         culled: list[str] = []
@@ -363,9 +406,9 @@ class ResourceCuller:
                 if workspace_id is None:
                     continue
 
-                # Never cull the default workspace
-                if workspace_id == "default":
-                    logger.debug("[Culler] Skipping default workspace")
+                # Only auto-generated workspaces are eligible; named and default layouts are protected
+                if not self._is_cullable_workspace(workspace_id):
+                    logger.debug(f"[Culler] Skipping protected workspace {workspace_id}")
                     continue
 
                 last_modified = metadata.get("last_modified")
@@ -433,8 +476,8 @@ class ResourceCuller:
                 if workspace_id is None:
                     continue
 
-                # Never cull the default workspace
-                if workspace_id == "default":
+                # Only auto-generated workspaces are eligible; named and default layouts are protected
+                if not self._is_cullable_workspace(workspace_id):
                     continue
 
                 last_modified = metadata.get("last_modified")

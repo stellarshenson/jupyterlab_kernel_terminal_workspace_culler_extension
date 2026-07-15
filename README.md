@@ -138,7 +138,12 @@ jupyterlab_kernel_terminal_workspace_culler cull --kernel-timeout 30 --terminal-
 
 # Cull workspaces idle > 1 minute (default is 7 days)
 jupyterlab_kernel_terminal_workspace_culler cull --workspace-timeout 1
+
+# Also cull terminals that still have an open browser tab (default: skip them)
+jupyterlab_kernel_terminal_workspace_culler cull --include-connected
 ```
+
+By default `cull` skips terminals with an open browser tab, matching the extension's disconnected-only behavior. Pass `--include-connected` to cull them anyway.
 
 The CLI auto-discovers running Jupyter servers. You can also set environment variables:
 

@@ -1,5 +1,17 @@
-# Makefile for Jupyterlab extensions version 1.31
+# Makefile for Jupyterlab extensions version 1.34
 # changelog:
+#   1.34 - build formats the lockfiles with `jlpm prettier` (the project's pinned
+#          toolchain) instead of `npx prettier`, which fails with "prettier: Permission
+#          denied" against a yarn-berry node_modules where the .cjs lacks the exec bit
+#   1.33 - check_dependencies now also treats a missing/empty node_modules as a missing
+#          dependency, and install_dependencies runs `jlpm install` to populate it, so
+#          `make install`/`test` self-heal a fresh env without needing a full build first
+#   1.32 - use a project-local nodeenv at .nodeenv/ instead of overwriting the python
+#          prefix via `nodeenv -p` (which used to fail with "Text file busy" when the
+#          existing node binary was held open). PATH=.nodeenv/bin:$PATH is exported so
+#          every target transparently picks up the pinned local node + npm + yarn.
+#          install_dependencies now guards each install step - only what's missing
+#          gets installed. mrproper removes .nodeenv too.
 #   1.31 - mrproper now removes ui-tests/node_modules (Playwright browser binaries)
 #   1.30 - check twine in check_dependencies, ensure publish doesn't fail on missing twine
 #   1.29 - replace yarn with jlpm, add prettier format, auto-commit and push after publish
@@ -9,6 +21,11 @@
 
 .PHONY: build install clean uninstall publish dependencies mrproper increment_version install_dependencies check_dependencies upgrade help test
 .DEFAULT_GOAL := help
+
+# Project-local node environment - keeps node/npm/yarn pinned per project and out of
+# the python prefix. Created by `install_dependencies` and torn down by `mrproper`.
+NODEENV := $(CURDIR)/.nodeenv
+export PATH := $(NODEENV)/bin:$(PATH)
 
 # Read current version from package.json (only if node is available)
 VERSION := $(shell command -v node >/dev/null 2>&1 && node -p "require('./package.json').version" || echo "0.0.0")
@@ -27,7 +44,7 @@ increment_version:
 build: clean increment_version check_dependencies
 	npm install
 	jlpm install
-	npx prettier --write package-lock.json package.json
+	jlpm prettier
 	python -m build
 
 ## install package
@@ -48,13 +65,15 @@ clean: uninstall  check_dependencies
 uninstall:  check_dependencies
 	pip uninstall -y dist/*.whl 2>/dev/null || true
 
-## check if required dependencies are installed
+## check if required dependencies are installed in the project-local nodeenv
 check_dependencies:
 	@echo "Checking dependencies..."
 	@MISSING=""; \
-	command -v node >/dev/null 2>&1 || MISSING="$$MISSING node"; \
-	command -v npm >/dev/null 2>&1 || MISSING="$$MISSING npm"; \
+	[ -x "$(NODEENV)/bin/node" ] || MISSING="$$MISSING node"; \
+	[ -x "$(NODEENV)/bin/npm" ] || MISSING="$$MISSING npm"; \
+	[ -x "$(NODEENV)/bin/yarn" ] || MISSING="$$MISSING yarn"; \
 	python -m twine --version >/dev/null 2>&1 || MISSING="$$MISSING twine"; \
+	{ [ -d node_modules ] && [ -n "$$(ls -A node_modules 2>/dev/null)" ]; } || MISSING="$$MISSING node_modules"; \
 	if [ -n "$$MISSING" ]; then \
 		echo "Missing dependencies:$$MISSING"; \
 		echo "Installing missing dependencies..."; \
@@ -71,19 +90,36 @@ publish: check_dependencies install
 	git commit -m "chore: post-publish $$(node -p "require('./package.json').version") package metadata"
 	git push
 
-## install all required build dependencies
+## install required build dependencies into the project-local nodeenv (only what's missing)
 install_dependencies:
-	pip install nodeenv twine
-	nodeenv --node=lts --prebuilt -p
-	npm install -g yarn rimraf
+	@if ! python -m twine --version >/dev/null 2>&1; then \
+		echo "Installing twine..."; \
+		pip install twine; \
+	fi
+	@if [ ! -x "$(NODEENV)/bin/node" ] || [ ! -x "$(NODEENV)/bin/npm" ]; then \
+		echo "Creating project-local node environment at $(NODEENV)..."; \
+		python -c "import nodeenv" >/dev/null 2>&1 || pip install nodeenv; \
+		nodeenv --node=lts --prebuilt "$(NODEENV)"; \
+	fi
+	@if [ ! -x "$(NODEENV)/bin/yarn" ]; then \
+		echo "Installing yarn + rimraf into $(NODEENV)..."; \
+		"$(NODEENV)/bin/npm" install -g yarn rimraf; \
+	fi
+	@if [ ! -d node_modules ] || [ -z "$$(ls -A node_modules 2>/dev/null)" ]; then \
+		echo "Installing project node_modules (jlpm install)..."; \
+		jlpm install; \
+	fi
+	@echo "node:  $$($(NODEENV)/bin/node --version 2>/dev/null) ($(NODEENV)/bin/node)"
+	@echo "npm:   $$($(NODEENV)/bin/npm --version 2>/dev/null)"
+	@echo "yarn:  $$($(NODEENV)/bin/yarn --version 2>/dev/null)"
 
 ## upgrade all npm and yarn dependencies
 upgrade: check_dependencies
 	jlpm up
 
-## cleanup all build and metabuild artefacts
+## cleanup all build and metabuild artefacts (including the project-local nodeenv)
 mrproper: clean uninstall
-	rm -rf node_modules .yarn ui-tests/node_modules || true
+	rm -rf node_modules .yarn ui-tests/node_modules .nodeenv || true
 
 ## prints the list of available commands
 help:

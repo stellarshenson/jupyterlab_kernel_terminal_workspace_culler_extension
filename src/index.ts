@@ -15,6 +15,11 @@ let cullCheckIntervalMinutes = 5; // default 5 minutes
 let cullResultsIntervalId: ReturnType<typeof setInterval> | null = null;
 let terminalReportIntervalId: ReturnType<typeof setInterval> | null = null;
 
+// Stable id for this frontend client, generated once per page load. Sent with every
+// active-terminals report so the backend can union open terminals across multiple
+// browser tabs/clients instead of letting one client's report clobber another's.
+const clientId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
 /**
  * Sync settings to the backend culler and update local interval settings.
  */
@@ -76,6 +81,10 @@ function setupIntervals(
       () => reportActiveTerminals(terminalTracker),
       intervalMs
     );
+    // Report immediately so a (re)armed interval - e.g. right after the check
+    // interval is lowered - refreshes the backend's active set without waiting
+    // a full cycle (otherwise a live client could briefly look stale).
+    reportActiveTerminals(terminalTracker);
   }
 
   console.log(
@@ -151,7 +160,7 @@ async function reportActiveTerminals(tracker: ITerminalTracker): Promise<void> {
   try {
     await requestAPI<{ status: string }>('active-terminals', {
       method: 'POST',
-      body: JSON.stringify({ terminals: activeTerminals })
+      body: JSON.stringify({ clientId, terminals: activeTerminals })
     });
   } catch (e) {
     console.debug('[Culler] Failed to report active terminals:', e);
