@@ -38,11 +38,18 @@ class SettingsHandler(APIHandler):
 
         try:
             settings = json.loads(self.request.body)
+            if not isinstance(settings, dict):
+                self.set_status(400)
+                self.finish(json.dumps({"error": "Body must be a JSON object"}))
+                return
             _culler.update_settings(settings)
             self.finish(json.dumps({"status": "ok"}))
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             self.set_status(400)
             self.finish(json.dumps({"error": "Invalid JSON"}))
+        except ValueError as e:
+            self.set_status(400)
+            self.finish(json.dumps({"error": str(e)}))
         except Exception as e:
             self.set_status(500)
             self.finish(json.dumps({"error": str(e)}))
@@ -108,11 +115,29 @@ class ActiveTerminalsHandler(APIHandler):
             return
         try:
             data = json.loads(self.request.body)
+            if not isinstance(data, dict):
+                self.set_status(400)
+                self.finish(json.dumps({"error": "Body must be a JSON object"}))
+                return
             terminals = data.get("terminals", [])
             client_id = data.get("clientId", "default")
-            _culler.set_active_terminals(terminals, client_id)
+            if (
+                not isinstance(terminals, list)
+                or not all(isinstance(t, str) for t in terminals)
+                or not isinstance(client_id, str)
+            ):
+                self.set_status(400)
+                self.finish(
+                    json.dumps(
+                        {"error": "terminals must be a list of strings, clientId a string"}
+                    )
+                )
+                return
+            _culler.set_active_terminals(
+                terminals, client_id, data.get("intervalMinutes")
+            )
             self.finish(json.dumps({"status": "ok"}))
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             self.set_status(400)
             self.finish(json.dumps({"error": "Invalid JSON"}))
         except Exception as e:
@@ -146,11 +171,29 @@ class CullWorkspacesHandler(APIHandler):
 
         try:
             data = json.loads(self.request.body)
+            if not isinstance(data, dict):
+                self.set_status(400)
+                self.finish(json.dumps({"error": "Body must be a JSON object"}))
+                return
             timeout_minutes = data.get("timeout", 10080)  # default 7 days
             dry_run = data.get("dry_run", False)
+            # exact types: a JSON true would otherwise compute a 60-SECOND
+            # threshold (True * 60) and delete every idle auto-* workspace
+            if (
+                type(timeout_minutes) is not int
+                or timeout_minutes < 1
+                or not isinstance(dry_run, bool)
+            ):
+                self.set_status(400)
+                self.finish(
+                    json.dumps(
+                        {"error": "timeout must be an integer >= 1, dry_run a boolean"}
+                    )
+                )
+                return
             culled = _culler.cull_workspaces_with_timeout(timeout_minutes, dry_run)
             self.finish(json.dumps({"workspaces_culled": culled}))
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
             self.set_status(400)
             self.finish(json.dumps({"error": "Invalid JSON"}))
         except Exception as e:

@@ -40,9 +40,9 @@ Automatically cull idle kernels, terminals, and workspaces after configurable ti
 
 **Kernels**: Checked for `execution_state` (busy kernels are never culled) and `last_activity` timestamp. A kernel is idle when it's not executing and hasn't had activity beyond the timeout.
 
-**Terminals**: By default, only terminals with no active browser tab are culled (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed, the terminal becomes eligible for culling after the idle timeout.
+**Terminals**: A terminal referenced by any existing workspace is never culled - the workspace must be culled first, which releases its terminals unless another surviving workspace still references them (the cascade). Beyond that, only terminals with no active browser tab are culled by default (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed or disconnected, the terminal becomes eligible for culling one full idle timeout later.
 
-**Workspaces**: Based on the workspace file's `last_modified` timestamp. JupyterLab creates auto-named workspaces (auto-0, auto-k, etc.) when you open multiple windows. The default workspace is never culled.
+**Workspaces**: Based on the workspace file's `last_modified` timestamp. JupyterLab creates auto-named workspaces (auto-0, auto-k, etc.) when you open multiple windows. Only auto-named workspaces are culled - the default workspace and named workspaces are never culled. Culling a workspace releases the terminals it referenced, so they can be culled in the same pass (the cascade).
 
 > **Note**: Terminal culling sends SIGHUP to the terminal process. Processes started with `nohup` will survive culling.
 

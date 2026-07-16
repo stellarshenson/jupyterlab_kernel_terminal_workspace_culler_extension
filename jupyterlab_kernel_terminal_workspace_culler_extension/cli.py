@@ -165,8 +165,12 @@ class JupyterClient:
             })
         return result
 
-    def list_workspaces(self) -> list[dict]:
-        """List all workspaces with their status."""
+    def list_workspaces(self) -> list[dict] | None:
+        """List all workspaces with their status.
+
+        Returns None when the extension endpoint is unavailable, so callers can
+        tell "no workspaces" from "cannot know".
+        """
         try:
             workspaces = self._get(
                 "jupyterlab-kernel-terminal-workspace-culler-extension/workspaces"
@@ -182,7 +186,7 @@ class JupyterClient:
                 })
             return result
         except Exception:
-            return []
+            return None
 
     def shutdown_kernel(self, kernel_id: str) -> bool:
         """Shutdown a kernel."""
@@ -199,15 +203,24 @@ class JupyterClient:
         except Exception:
             return None
 
-    def get_terminals_connection(self) -> dict[str, bool]:
-        """Get terminal connection status from the extension."""
+    def get_terminals_connection(self) -> dict[str, bool] | None:
+        """Get terminal connection status from the extension.
+
+        Returns None when the endpoint is unavailable - callers must treat that
+        as "unknown", never as "all disconnected", or an endpoint failure would
+        silently remove the open-tab protection and cull connected terminals.
+        """
         try:
             return self._get("jupyterlab-kernel-terminal-workspace-culler-extension/terminals-connection")
         except Exception:
-            return {}
+            return None
 
-    def cull_workspaces(self, timeout_minutes: int, dry_run: bool = False) -> list[dict]:
-        """Cull workspaces via the backend extension."""
+    def cull_workspaces(self, timeout_minutes: int, dry_run: bool = False) -> list[dict] | None:
+        """Cull workspaces via the backend extension.
+
+        Returns None when the extension endpoint is unavailable - callers must
+        surface that as an error, not as "nothing to cull".
+        """
         try:
             url = urljoin(
                 self.server_url,
@@ -222,7 +235,27 @@ class JupyterClient:
             response.raise_for_status()
             return response.json().get("workspaces_culled", [])
         except Exception:
-            return []
+            return None
+
+
+def resolve_server_url_and_token(args: argparse.Namespace) -> tuple[str, str | None]:
+    """Resolve the target server: --server-url > JUPYTER_SERVER_URL > auto-detect.
+
+    The token falls back to the documented env chain in every branch, so an
+    explicit --server-url without --token still authenticates via JUPYTER_TOKEN.
+    """
+    env_token = (
+        os.environ.get("JUPYTERHUB_API_TOKEN")
+        or os.environ.get("JPY_API_TOKEN")
+        or os.environ.get("JUPYTER_TOKEN")
+    )
+    if args.server_url:
+        return args.server_url, args.token or env_token
+    env_url = os.environ.get("JUPYTER_SERVER_URL")
+    if env_url:
+        return env_url, args.token or env_token
+    server_url, auto_token = get_jupyter_server_info()
+    return server_url, args.token if args.token else auto_token
 
 
 def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
@@ -233,10 +266,12 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     culler_status = client.get_culler_status()
     terminals_connection = client.get_terminals_connection()
 
-    # Add connection status to terminals
+    # Add connection status to terminals (None = extension unavailable, unknown)
     for t in terminals:
         name = t.get("name")
-        t["connected"] = terminals_connection.get(name, False)
+        t["connected"] = (
+            None if terminals_connection is None else terminals_connection.get(name, False)
+        )
 
     if args.json:
         output = {
@@ -275,7 +310,11 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     print("-" * 60)
     if terminals:
         for t in terminals:
-            conn_status = "connected" if t.get("connected") else "disconnected"
+            connected = t.get("connected")
+            if connected is None:
+                conn_status = "unknown"
+            else:
+                conn_status = "connected" if connected else "disconnected"
             print(f"  {t['name']:8}  {conn_status:12}  idle: {t['idle_time']:>8}")
     else:
         print("  (none)")
@@ -285,8 +324,11 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     if workspaces:
         for w in workspaces:
             ws_id = w["id"] or "unknown"
-            protected = " (protected)" if ws_id == "default" else ""
+            # Server rule: everything not auto-* is protected (named + default)
+            protected = "" if ws_id.lstrip("/").startswith("auto-") else " (protected)"
             print(f"  {ws_id:12}  idle: {w['idle_time']:>8}{protected}")
+    elif workspaces is None:
+        print("  (culler extension unavailable)")
     else:
         print("  (none)")
 
@@ -321,24 +363,46 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
                 results["kernels_culled"].append({"id": k["id"], "idle_time": k["idle_time"], "action": "culled" if success else "failed"})
 
     # Cull idle terminals (skip those with an open browser tab unless --include-connected)
-    terminals_connection = {} if args.include_connected else client.get_terminals_connection()
-    for t in terminals:
-        if not args.include_connected and terminals_connection.get(t["name"], False):
-            continue
-        if t["idle_seconds"] > 0 and t["idle_seconds"] > terminal_timeout:
-            if args.dry_run:
-                results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "would_cull"})
-            else:
-                success = client.terminate_terminal(t["name"])
-                results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "culled" if success else "failed"})
+    terminals_connection: dict[str, bool] | None = (
+        {} if args.include_connected else client.get_terminals_connection()
+    )
+    if terminals_connection is None:
+        # Fail closed: without connection status we cannot tell open-tab terminals
+        # from disconnected ones, and culling blind would kill connected terminals
+        print(
+            "Error: cannot determine terminal connection status (culler extension "
+            "unavailable); skipping terminal culling. Pass --include-connected to "
+            "cull terminals regardless of connection status.",
+            file=sys.stderr,
+        )
+        exit_code = 1
+    else:
+        exit_code = 0
+        for t in terminals:
+            if not args.include_connected and terminals_connection.get(t["name"], False):
+                continue
+            if t["idle_seconds"] > 0 and t["idle_seconds"] > terminal_timeout:
+                if args.dry_run:
+                    results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "would_cull"})
+                else:
+                    success = client.terminate_terminal(t["name"])
+                    results["terminals_culled"].append({"name": t["name"], "idle_time": t["idle_time"], "action": "culled" if success else "failed"})
 
-    # Cull idle workspaces via backend
+    # Cull idle workspaces via backend (fail closed: unavailable is an error,
+    # not "nothing to cull")
     workspaces_culled = client.cull_workspaces(args.workspace_timeout, args.dry_run)
+    if workspaces_culled is None:
+        print(
+            "Error: cannot cull workspaces (culler extension unavailable).",
+            file=sys.stderr,
+        )
+        exit_code = 1
+        workspaces_culled = []
     results["workspaces_culled"] = workspaces_culled
 
     if args.json:
         print(json.dumps(results, indent=2))
-        return 0
+        return exit_code
 
     # Human-readable output
     prefix = "[DRY RUN] " if args.dry_run else ""
@@ -364,7 +428,7 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
     else:
         print(f"{prefix}No workspaces to cull")
 
-    return 0
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -405,7 +469,7 @@ Examples:
     cull_parser.add_argument("--dry-run", action="store_true", help="Simulate culling without actually terminating")
     cull_parser.add_argument("--kernel-timeout", type=int, default=60, metavar="MIN", help="Kernel idle timeout in minutes (default: 60)")
     cull_parser.add_argument("--terminal-timeout", type=int, default=60, metavar="MIN", help="Terminal idle timeout in minutes (default: 60)")
-    cull_parser.add_argument("--include-connected", action="store_true", help="Also cull terminals with an open browser tab (default: skip connected terminals)")
+    cull_parser.add_argument("--include-connected", action="store_true", help="Also cull terminals with an open browser tab or referenced by a workspace (default: skip protected terminals)")
     cull_parser.add_argument("--workspace-timeout", type=int, default=10080, metavar="MIN", help="Workspace idle timeout in minutes (default: 10080 = 7 days)")
     cull_parser.set_defaults(func=cmd_cull)
 
@@ -416,13 +480,8 @@ Examples:
         parser.print_help()
         return 0
 
-    # Get server URL and token (auto-detect or from args)
-    if args.server_url:
-        server_url = args.server_url
-        token = args.token  # Use provided token or None
-    else:
-        server_url, auto_token = get_jupyter_server_info()
-        token = args.token if args.token else auto_token
+    # Get server URL and token (from args, JUPYTER_SERVER_URL, or auto-detect)
+    server_url, token = resolve_server_url_and_token(args)
 
     client = JupyterClient(server_url, token)
 

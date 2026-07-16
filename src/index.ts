@@ -31,10 +31,7 @@ async function syncSettings(
   const composite = settings.composite as Record<string, unknown>;
   showNotifications = (composite.showNotifications as boolean) ?? true;
 
-  // Check if cullCheckInterval changed
   const newInterval = (composite.cullCheckInterval as number) ?? 5;
-  const intervalChanged = newInterval !== cullCheckIntervalMinutes;
-  cullCheckIntervalMinutes = newInterval;
 
   try {
     await requestAPI<{ status: string }>('settings', {
@@ -43,9 +40,14 @@ async function syncSettings(
     });
   } catch (error) {
     console.error('[Culler] Failed to sync settings to backend:', error);
+    // Keep the current cadence: committing an interval the backend never
+    // received would let this client's reports be judged against the wrong TTL.
+    return;
   }
 
   // Restart intervals if cullCheckInterval changed
+  const intervalChanged = newInterval !== cullCheckIntervalMinutes;
+  cullCheckIntervalMinutes = newInterval;
   if (intervalChanged) {
     console.log(
       `[Culler] Cull check interval changed to ${cullCheckIntervalMinutes} minutes`
@@ -150,17 +152,30 @@ async function reportActiveTerminals(tracker: ITerminalTracker): Promise<void> {
   tracker.forEach(widget => {
     // widget.content is the Terminal, widget.content.session.name is the terminal name
     // Check isAttached (has open tab) and !isDisposed, but NOT isVisible
-    // isVisible is false when tab exists but another tab is selected
-    const name = widget.content.session?.name;
-    if (name && widget.isAttached && !widget.isDisposed) {
-      activeTerminals.push(name);
+    // isVisible is false when tab exists but another tab is selected.
+    // A disposed session is a zombie widget (terminal killed server-side with
+    // closeOnExit=false): its stale name must not be reported, or it would
+    // protect an unrelated new terminal that reuses the same name.
+    const session = widget.content.session;
+    if (
+      session?.name &&
+      !session.isDisposed &&
+      widget.isAttached &&
+      !widget.isDisposed
+    ) {
+      activeTerminals.push(session.name);
     }
   });
 
   try {
     await requestAPI<{ status: string }>('active-terminals', {
       method: 'POST',
-      body: JSON.stringify({ clientId, terminals: activeTerminals })
+      body: JSON.stringify({
+        clientId,
+        // Our report cadence, so the backend judges staleness against it
+        intervalMinutes: cullCheckIntervalMinutes,
+        terminals: activeTerminals
+      })
     });
   } catch (e) {
     console.debug('[Culler] Failed to report active terminals:', e);

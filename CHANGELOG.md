@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.24] - 2026-07-16
+
+### Added
+
+- Workspace-aware terminal protection with cull cascade: terminals referenced by any existing workspace are never culled; culling a workspace releases its terminals unless another surviving workspace still references them (cull order is now workspaces before terminals)
+- Disconnect grace: a terminal becomes cull-eligible one full idle timeout after its last tab evidence disappears, covering exhausted websocket reconnects and sleep/wake
+- CLI honours the documented `JUPYTER_SERVER_URL` environment variable and falls back to the env token chain in every server-resolution branch
+
+### Fixed
+
+- Terminals with open tabs are no longer culled when browser tab throttling stalls frontend reports - the culler now checks terminado's per-terminal websocket clients as ground truth
+- CLI `cull` fails closed when the extension endpoint is unavailable instead of terminating open-tab terminals; workspace culling likewise reports an error instead of silent success
+- Workspace culler uses the server's configured workspaces directory (`workspaces_dir` trait, `JUPYTERLAB_WORKSPACES_DIR`) instead of resolving its own
+- Frontend report staleness is judged against each client's own cadence; a failed settings sync no longer desynchronizes the report interval
+- REST handlers validate input atomically (wrong types, non-object or undecodable bodies return 400; a boolean `timeout` no longer computes a 60-second threshold that deleted workspaces)
+- Zombie terminal widgets (terminal killed server-side with `closeOnExit: false`) no longer protect unrelated terminals after terminado reuses the name
+- CLI `list` marks every non-`auto-*` workspace as protected, matching the server rule
+
 ## [1.0.23] - 2026-07-15
 
 ### Added
