@@ -47,6 +47,11 @@ class ResourceCuller:
         # (network blip, sleep/wake) cannot cull it on the next check.
         self._terminal_tab_last_seen: dict[str, datetime] = {}
 
+        # Terminals a cull attempt failed to remove. Attempted once, then skipped:
+        # a terminal that cannot be culled otherwise costs one log line and one
+        # notification per check interval for the life of the server.
+        self._terminal_cull_failed: set[str] = set()
+
         # Workspace manager (lazy initialization)
         self._workspace_manager: Any = None
 
@@ -468,6 +473,7 @@ class ResourceCuller:
         current_names = {t.get("name") for t in terminals}
         for gone in set(self._terminal_tab_last_seen) - current_names:
             del self._terminal_tab_last_seen[gone]
+        self._terminal_cull_failed &= current_names
 
         for terminal in terminals:
             try:
@@ -522,18 +528,95 @@ class ResourceCuller:
                 idle_minutes = idle_seconds / 60
 
                 if idle_seconds > timeout_seconds:
+                    if name in self._terminal_cull_failed:
+                        logger.debug(
+                            f"[Culler] Skipping terminal {name} - an earlier cull "
+                            "could not remove it"
+                        )
+                        continue
+
                     logger.info(
                         f"[Culler] CULLING TERMINAL {name} - idle {idle_minutes:.1f} minutes "
                         f"(threshold: {self._terminal_cull_idle_timeout})"
                     )
-                    await terminal_mgr.terminate(name)
-                    logger.info(f"[Culler] Terminal {name} culled successfully")
-                    culled.append(name)
+                    # force=True matches jupyter_server_terminals' own culler: it is
+                    # the only path that reaches SIGKILL, so a shell that ignores
+                    # SIGHUP, SIGINT and SIGTERM does not survive the cull
+                    await terminal_mgr.terminate(name, force=True)
+
+                    if not self._terminal_removed(terminal_mgr, name):
+                        self._reap_defunct_terminal(terminal_mgr, name)
+
+                    if self._terminal_removed(terminal_mgr, name):
+                        logger.info(f"[Culler] Terminal {name} culled successfully")
+                        culled.append(name)
+                    else:
+                        self._terminal_cull_failed.add(name)
+                        logger.warning(
+                            f"[Culler] Terminal {name} is still registered after the "
+                            "cull; leaving it alone from now on"
+                        )
 
             except Exception as e:
                 logger.error(f"[Culler] Failed to cull terminal {name}: {e}")
 
         return culled
+
+    @staticmethod
+    def _terminal_removed(terminal_mgr: Any, name: str) -> bool:
+        """Whether the terminal is gone from the manager's registry.
+
+        The registry is the only honest outcome signal: ``NamedTermManager.terminate``
+        returns ``None``, discarding the boolean ``PtyWithClients.terminate`` produces,
+        so a cull cannot learn from the call whether it worked. A manager without a
+        ``terminals`` registry cannot be checked and is taken at its word.
+        """
+        terminals = getattr(terminal_mgr, "terminals", None)
+        if not isinstance(terminals, dict):
+            return True
+        return name not in terminals
+
+    def _reap_defunct_terminal(self, terminal_mgr: Any, name: str) -> None:
+        """Close a terminal whose shell is dead but whose pty is still held open.
+
+        terminado drops a terminal from its registry in exactly one place, ``on_eof``,
+        which runs when the pty master reads EOF. That cannot happen while any process
+        holds the slave open - a job that outlived the shell and was reparented to
+        PID 1 keeps it open for the life of the server - so the entry is immortal by
+        construction, while ``PtyWithClients.terminate`` returns True immediately
+        because the child is already dead. Run the EOF path by hand for exactly that
+        case: it deregisters the fd, closes the master and drops the entry, which is
+        what EOF would have done. The surviving process is left alone; it is doing
+        nothing wrong and is not the culler's to kill.
+        """
+        terminals = getattr(terminal_mgr, "terminals", None)
+        if not isinstance(terminals, dict):
+            return
+        term = terminals.get(name)
+        if term is None:
+            return
+
+        ptyproc = getattr(term, "ptyproc", None)
+        if ptyproc is None:
+            return
+        try:
+            if ptyproc.isalive():
+                return
+        except Exception as e:
+            logger.warning(f"[Culler] Terminal {name} liveness unknown: {e}")
+            return
+
+        logger.warning(
+            f"[Culler] Terminal {name} has no live shell but is still registered; "
+            "closing it as terminado would on EOF"
+        )
+        try:
+            terminal_mgr.on_eof(term)
+        except Exception as e:
+            logger.error(f"[Culler] EOF handling failed for terminal {name}: {e}")
+        # on_eof drops the entry itself; pop again so a partial failure above still
+        # ends the loop rather than leaving an entry nothing can ever remove
+        terminals.pop(name, None)
 
     @staticmethod
     def _is_cullable_workspace(workspace_id: str) -> bool:

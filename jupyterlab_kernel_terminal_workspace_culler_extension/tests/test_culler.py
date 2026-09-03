@@ -205,7 +205,9 @@ class TestCullIdleTerminal:
         culled = await culler._cull_terminals()
 
         assert terminal_name in culled
-        mock_server_app.terminal_manager.terminate.assert_called_once_with(terminal_name)
+        mock_server_app.terminal_manager.terminate.assert_called_once_with(
+            terminal_name, force=True
+        )
 
     @pytest.mark.asyncio
     async def test_skip_active_terminal(self, culler, mock_server_app):
@@ -267,10 +269,17 @@ class TestCullIdleTerminal:
         assert terminal_name in culled
 
 
-def _pty_with_clients(n_clients: int) -> MagicMock:
-    """Fake terminado PtyWithClients carrying n attached websocket clients."""
+def _pty_with_clients(n_clients: int, alive: bool = False) -> MagicMock:
+    """Fake terminado PtyWithClients carrying n attached websocket clients.
+
+    ``alive`` is the shell's state as ``ptyproc.isalive()`` reports it. It
+    defaults to False because that is what a terminal looks like once the cull
+    has terminated it, and the culler reads it to decide whether an entry still
+    in the registry is defunct (DEF-TERM-21).
+    """
     pty = MagicMock()
     pty.clients = [MagicMock() for _ in range(n_clients)]
+    pty.ptyproc.isalive.return_value = alive
     return pty
 
 
@@ -424,7 +433,7 @@ class TestWorkspaceTerminalProtection:
         await culler._cull_idle_resources()
 
         ws_mgr.delete.assert_called_once_with("auto-0")
-        mock_server_app.terminal_manager.terminate.assert_called_once_with("1")
+        mock_server_app.terminal_manager.terminate.assert_called_once_with("1", force=True)
 
     @pytest.mark.asyncio
     async def test_cascade_blocked_by_surviving_workspace(
@@ -713,3 +722,93 @@ class TestStatus:
         status = culler.get_status()
         assert "settings" in status
         assert "kernelCullEnabled" in status["settings"]
+
+
+class TestDefunctTerminalReap:
+    """DEF-TERM-21: a terminal whose pty an orphan holds open must not be culled
+    in an endless loop.
+
+    terminado drops a terminal from its registry only in ``on_eof``, which cannot
+    fire while a process that outlived the shell keeps the pty slave open, and
+    ``terminate`` reports success because the child is already dead.
+    """
+
+    @staticmethod
+    def _register(mock_server_app, name, alive):
+        """Put a terminal in the manager's registry that survives terminate."""
+        pty = _pty_with_clients(0, alive=alive)
+        mock_server_app.terminal_manager.terminals[name] = pty
+        idle_time = datetime.now(timezone.utc) - timedelta(minutes=120)
+        mock_server_app.terminal_manager.list.return_value = [
+            {"name": name, "last_activity": idle_time}
+        ]
+        return pty
+
+    @pytest.mark.asyncio
+    async def test_defunct_terminal_is_closed_by_hand(self, culler, mock_server_app):
+        """Shell dead, entry still registered: run the EOF path and drop it."""
+        pty = self._register(mock_server_app, "3", alive=False)
+
+        culled = await culler._cull_terminals()
+
+        mock_server_app.terminal_manager.on_eof.assert_called_once_with(pty)
+        assert "3" not in mock_server_app.terminal_manager.terminals
+        assert culled == ["3"]
+
+    @pytest.mark.asyncio
+    async def test_live_shell_that_survives_is_left_alone(
+        self, culler, mock_server_app
+    ):
+        """A terminal whose shell is still alive is never force-closed by hand."""
+        self._register(mock_server_app, "3", alive=True)
+
+        culled = await culler._cull_terminals()
+
+        mock_server_app.terminal_manager.on_eof.assert_not_called()
+        assert "3" in mock_server_app.terminal_manager.terminals
+
+    @pytest.mark.asyncio
+    async def test_survivor_is_not_reported_as_culled(self, culler, mock_server_app):
+        """The registry, not the terminate call, decides what counts as culled."""
+        self._register(mock_server_app, "3", alive=True)
+
+        culled = await culler._cull_terminals()
+
+        assert culled == []
+
+    @pytest.mark.asyncio
+    async def test_survivor_is_not_attempted_again(self, culler, mock_server_app):
+        """One stuck terminal costs one attempt, not one per check interval."""
+        self._register(mock_server_app, "3", alive=True)
+
+        await culler._cull_terminals()
+        mock_server_app.terminal_manager.terminate.reset_mock()
+        culled = await culler._cull_terminals()
+
+        mock_server_app.terminal_manager.terminate.assert_not_called()
+        assert culled == []
+
+    @pytest.mark.asyncio
+    async def test_eof_failure_still_drops_the_entry(self, culler, mock_server_app):
+        """A half-failed EOF must not leave an entry nothing can ever remove."""
+        self._register(mock_server_app, "3", alive=False)
+        mock_server_app.terminal_manager.on_eof.side_effect = KeyError(7)
+
+        culled = await culler._cull_terminals()
+
+        assert "3" not in mock_server_app.terminal_manager.terminals
+        assert culled == ["3"]
+
+    @pytest.mark.asyncio
+    async def test_failure_memory_forgets_vanished_terminals(
+        self, culler, mock_server_app
+    ):
+        """The name is only remembered while the terminal is still there."""
+        self._register(mock_server_app, "3", alive=True)
+        await culler._cull_terminals()
+        assert culler._terminal_cull_failed == {"3"}
+
+        mock_server_app.terminal_manager.list.return_value = []
+        await culler._cull_terminals()
+
+        assert culler._terminal_cull_failed == set()

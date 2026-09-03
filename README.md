@@ -40,11 +40,11 @@ Automatically cull idle kernels, terminals, and workspaces after configurable ti
 
 **Kernels**: Checked for `execution_state` (busy kernels are never culled) and `last_activity` timestamp. A kernel is idle when it's not executing and hasn't had activity beyond the timeout.
 
-**Terminals**: A terminal referenced by any existing workspace is never culled - the workspace must be culled first, which releases its terminals unless another surviving workspace still references them (the cascade). Beyond that, only terminals with no active browser tab are culled by default (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed or disconnected, the terminal becomes eligible for culling one full idle timeout later.
+**Terminals**: A terminal referenced by any existing workspace is never culled - the workspace must be culled first, which releases its terminals unless another surviving workspace still references them (the cascade). Beyond that, only terminals with no active browser tab are culled by default (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed or disconnected, the terminal becomes eligible for culling one full idle timeout later. A terminal counts as culled only once the server has actually removed it: a terminal whose shell has exited but whose pty is still held open by a surviving process is closed the way an end-of-file would have closed it, and a terminal that survives a cull anyway is attempted once and then left alone.
 
 **Workspaces**: Based on the workspace file's `last_modified` timestamp. JupyterLab creates auto-named workspaces (auto-0, auto-k, etc.) when you open multiple windows. Only auto-named workspaces are culled - the default workspace and named workspaces are never culled. Culling a workspace releases the terminals it referenced, so they can be culled in the same pass (the cascade).
 
-> **Note**: Terminal culling sends SIGHUP to the terminal process. Processes started with `nohup` will survive culling.
+> **Note**: Terminal culling signals the terminal's own shell, starting with SIGHUP and escalating through SIGINT and SIGTERM to SIGKILL if it does not exit. Processes started with `nohup`, `screen` or `tmux` are detached from that shell and survive culling.
 
 ## Installation
 

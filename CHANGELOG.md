@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.25] - 2026-09-03
+
+### Fixed
+
+- Idle terminals whose shell has exited but whose pty is still held open by a surviving process are now closed instead of being culled again on every check: the culler runs terminado's end-of-file path itself, which frees the registry entry, the pty master and its event-loop handler
+- A terminal is reported as culled only once it has left the terminal manager's registry, so the notification and the log line report the outcome rather than the attempt
+- Terminal culling escalates to SIGKILL (`force=True`), matching the built-in `jupyter_server_terminals` culler; previously a shell that ignored SIGHUP, SIGINT and SIGTERM survived
+- A terminal that survives a cull is attempted once and skipped afterwards, so a stuck terminal no longer produces one log line and one notification per check interval
+
+### Added
+
+- `docs/acc-crit.md`, the acceptance criteria the culler is verified against (34 criteria, all covered by unit tests)
+- Permanent tracked ids and authorship in `docs/defects.md`
+
 ## [1.0.24] - 2026-07-16
 
 ### Added
