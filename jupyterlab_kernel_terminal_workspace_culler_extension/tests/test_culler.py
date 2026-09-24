@@ -1,6 +1,8 @@
 """Unit tests for the resource culler."""
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -54,6 +56,7 @@ class TestDefaultSettings:
         settings = culler.get_settings()
         assert settings["terminalCullEnabled"] is True
         assert settings["terminalCullIdleTimeout"] == 60  # 1 hour
+        assert settings["terminalCullMaxIdleTimeout"] == 10080  # 7 days
         assert settings["terminalCullDisconnectedOnly"] is True
 
     def test_default_workspace_settings(self, culler):
@@ -64,6 +67,14 @@ class TestDefaultSettings:
     def test_default_check_interval(self, culler):
         settings = culler.get_settings()
         assert settings["cullCheckInterval"] == 5
+
+    def test_schema_defaults_match_server_defaults(self, culler):
+        """A default lives in the schema and on the server; they must not drift."""
+        schema_path = Path(__file__).parents[2] / "schema" / "plugin.json"
+        properties = json.loads(schema_path.read_text())["properties"]
+
+        for key, value in culler.get_settings().items():
+            assert properties[key]["default"] == value, key
 
 
 class TestUpdateSettings:
@@ -76,10 +87,15 @@ class TestUpdateSettings:
         assert settings["kernelCullIdleTimeout"] == 120
 
     def test_update_terminal_settings(self, culler):
-        culler.update_settings({"terminalCullEnabled": False, "terminalCullIdleTimeout": 45})
+        culler.update_settings({
+            "terminalCullEnabled": False,
+            "terminalCullIdleTimeout": 45,
+            "terminalCullMaxIdleTimeout": 1440,
+        })
         settings = culler.get_settings()
         assert settings["terminalCullEnabled"] is False
         assert settings["terminalCullIdleTimeout"] == 45
+        assert settings["terminalCullMaxIdleTimeout"] == 1440
 
     def test_update_workspace_settings(self, culler):
         culler.update_settings({"workspaceCullEnabled": False, "workspaceCullIdleTimeout": 1440})
@@ -100,12 +116,14 @@ class TestUpdateSettings:
         culler.update_settings({
             "kernelCullIdleTimeout": 0,
             "terminalCullIdleTimeout": -5,
+            "terminalCullMaxIdleTimeout": 0,
             "workspaceCullIdleTimeout": 0,
             "cullCheckInterval": 0,
         })
         settings = culler.get_settings()
         assert settings["kernelCullIdleTimeout"] == 1
         assert settings["terminalCullIdleTimeout"] == 1
+        assert settings["terminalCullMaxIdleTimeout"] == 1
         assert settings["workspaceCullIdleTimeout"] == 1
         assert settings["cullCheckInterval"] == 1
 
@@ -372,8 +390,8 @@ class TestWebsocketTabProtection:
 
 
 class TestWorkspaceTerminalProtection:
-    """A terminal referenced by any not-yet-culled workspace is NEVER culled;
-    culling the workspace releases it (the cascade)."""
+    """A terminal referenced by any not-yet-culled workspace is not culled before
+    the terminal maximum idle; culling the workspace releases it (the cascade)."""
 
     @staticmethod
     def _ws(ws_id: str, terminal_names: list[str], idle_days: int = 10) -> dict:
@@ -429,6 +447,7 @@ class TestWorkspaceTerminalProtection:
         ws_mgr = culler._workspace_manager
         ws_mgr.list_workspaces.side_effect = lambda: list(workspaces)
         ws_mgr.delete.side_effect = lambda ws_id: workspaces.clear()
+        culler.update_settings({})
 
         await culler._cull_idle_resources()
 
@@ -449,11 +468,30 @@ class TestWorkspaceTerminalProtection:
         ws_mgr = culler._workspace_manager
         ws_mgr.list_workspaces.side_effect = lambda: list(workspaces)
         ws_mgr.delete.side_effect = lambda ws_id: workspaces.pop(0)
+        culler.update_settings({})
 
         await culler._cull_idle_resources()
 
         ws_mgr.delete.assert_called_once_with("auto-0")
         mock_server_app.terminal_manager.terminate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cascade_through_named_workspace(self, culler, mock_server_app):
+        """DEF-WSPACE-23: a culled named workspace releases its terminals too."""
+        idle_time = datetime.now(timezone.utc) - timedelta(minutes=120)
+        mock_server_app.terminal_manager.list.return_value = [
+            {"name": "1", "last_activity": idle_time}
+        ]
+        workspaces = [self._ws("probe", ["1"])]
+        ws_mgr = culler._workspace_manager
+        ws_mgr.list_workspaces.side_effect = lambda: list(workspaces)
+        ws_mgr.delete.side_effect = lambda ws_id: workspaces.clear()
+        culler.update_settings({})
+
+        await culler._cull_idle_resources()
+
+        ws_mgr.delete.assert_called_once_with("probe")
+        mock_server_app.terminal_manager.terminate.assert_called_once_with("1", force=True)
 
     @pytest.mark.asyncio
     async def test_grace_survives_reference_loss(self, culler, mock_server_app):
@@ -628,7 +666,7 @@ class TestActiveTerminals:
 
 
 class TestCullWorkspaces:
-    """DEF-2/DEF-4: only auto-* workspaces are cull-eligible."""
+    """Every workspace except default is cull-eligible (DEF-WSPACE-23)."""
 
     def _ws_mgr(self, ids):
         old = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
@@ -638,14 +676,14 @@ class TestCullWorkspaces:
         ]
         return ws_mgr
 
-    def test_cull_auto_only(self, culler):
+    def test_named_and_auto_culled_default_kept(self, culler):
         ws_mgr = self._ws_mgr(["auto-0", "default", "myproject"])
         culler._workspace_manager = ws_mgr
 
         culled = culler._cull_workspaces()
 
-        assert culled == ["auto-0"]
-        ws_mgr.delete.assert_called_once_with("auto-0")
+        assert culled == ["auto-0", "myproject"]
+        assert [c.args[0] for c in ws_mgr.delete.call_args_list] == ["auto-0", "myproject"]
 
     def test_default_never_culled(self, culler):
         ws_mgr = self._ws_mgr(["default", "/default"])
@@ -656,20 +694,21 @@ class TestCullWorkspaces:
         assert culled == []
         ws_mgr.delete.assert_not_called()
 
-    def test_named_workspace_preserved(self, culler):
-        ws_mgr = self._ws_mgr(["myproject", "analysis"])
+    def test_named_workspace_culled(self, culler):
+        """DEF-WSPACE-23: a named workspace idle past the timeout is deleted."""
+        ws_mgr = self._ws_mgr(["myproject", "/analysis"])
         culler._workspace_manager = ws_mgr
 
         culled = culler._cull_workspaces()
 
-        assert culled == []
-        ws_mgr.delete.assert_not_called()
+        assert culled == ["myproject", "/analysis"]
 
-    def test_recent_auto_not_culled(self, culler):
+    def test_recent_workspace_not_culled(self, culler):
         recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         ws_mgr = MagicMock()
         ws_mgr.list_workspaces.return_value = [
-            {"metadata": {"id": "auto-0", "last_modified": recent}}
+            {"metadata": {"id": wid, "last_modified": recent}}
+            for wid in ("auto-0", "myproject")
         ]
         culler._workspace_manager = ws_mgr
 
@@ -677,6 +716,36 @@ class TestCullWorkspaces:
 
         assert culled == []
         ws_mgr.delete.assert_not_called()
+
+    def test_cli_path_culls_named_keeps_default(self, culler):
+        ws_mgr = self._ws_mgr(["auto-0", "default", "myproject"])
+        culler._workspace_manager = ws_mgr
+
+        result = culler.cull_workspaces_with_timeout(60)
+
+        assert [r["id"] for r in result] == ["auto-0", "myproject"]
+        assert all(r["action"] == "culled" for r in result)
+
+    @pytest.mark.asyncio
+    async def test_workspaces_wait_for_the_users_settings(self, culler):
+        """After a server restart the built-in defaults never delete a workspace:
+        the pass waits until the frontend has sent the user's settings."""
+        ws_mgr = self._ws_mgr(["probe"])
+        culler._workspace_manager = ws_mgr
+
+        await culler._cull_idle_resources()
+        ws_mgr.delete.assert_not_called()
+
+        culler.update_settings({})
+        await culler._cull_idle_resources()
+        ws_mgr.delete.assert_called_once_with("probe")
+
+    def test_listing_marks_only_default_protected(self, culler):
+        culler._workspace_manager = self._ws_mgr(["auto-0", "default", "myproject"])
+
+        listed = {w["id"]: w["protected"] for w in culler.list_workspaces()}
+
+        assert listed == {"auto-0": False, "default": True, "myproject": False}
 
 
 class TestCullResult:
@@ -812,3 +881,103 @@ class TestDefunctTerminalReap:
         await culler._cull_terminals()
 
         assert culler._terminal_cull_failed == set()
+
+
+class TestTerminalMaxIdle:
+    """Past terminalCullMaxIdleTimeout nothing protects a terminal: not an open
+    tab, not a frontend report, not a workspace reference, not the tab grace."""
+
+    @staticmethod
+    def _terminal(mock_server_app, name, idle, n_clients=0):
+        mock_server_app.terminal_manager.list.return_value = [
+            {"name": name, "last_activity": datetime.now(timezone.utc) - idle}
+        ]
+        mock_server_app.terminal_manager.terminals = {name: _pty_with_clients(n_clients)}
+        # terminate removes the entry, as terminado's EOF would
+        mock_server_app.terminal_manager.terminate.side_effect = (
+            lambda n, force: mock_server_app.terminal_manager.terminals.pop(n)
+        )
+
+    @staticmethod
+    def _referenced_by_default(culler, name):
+        culler._workspace_manager.list_workspaces.return_value = [
+            {"data": {f"terminal:{name}": {}}, "metadata": {"id": "default"}}
+        ]
+
+    @pytest.mark.asyncio
+    async def test_open_tab_and_reference_do_not_protect_past_max(
+        self, culler, mock_server_app
+    ):
+        self._terminal(mock_server_app, "1", timedelta(days=8), n_clients=1)
+        self._referenced_by_default(culler, "1")
+        culler.set_active_terminals(["1"], client_id="A")
+
+        culled = await culler._cull_terminals()
+
+        assert culled == ["1"]
+        mock_server_app.terminal_manager.terminate.assert_called_once_with("1", force=True)
+
+    @pytest.mark.asyncio
+    async def test_protected_below_max(self, culler, mock_server_app):
+        self._terminal(mock_server_app, "1", timedelta(days=6), n_clients=1)
+        self._referenced_by_default(culler, "1")
+
+        culled = await culler._cull_terminals()
+
+        assert culled == []
+        mock_server_app.terminal_manager.terminate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tab_grace_does_not_extend_max(self, culler, mock_server_app):
+        """The grace a closed tab grants delays only the idle timeout."""
+        self._terminal(mock_server_app, "1", timedelta(days=8))
+        culler._terminal_tab_last_seen["1"] = datetime.now(timezone.utc) - timedelta(minutes=1)
+
+        culled = await culler._cull_terminals()
+
+        assert culled == ["1"]
+
+    @pytest.mark.asyncio
+    async def test_max_setting_respected(self, culler, mock_server_app):
+        culler.update_settings({"terminalCullMaxIdleTimeout": 180})
+
+        self._terminal(mock_server_app, "1", timedelta(minutes=120), n_clients=1)
+        assert await culler._cull_terminals() == []
+
+        self._terminal(mock_server_app, "1", timedelta(minutes=240), n_clients=1)
+        assert await culler._cull_terminals() == ["1"]
+
+    @pytest.mark.asyncio
+    async def test_max_caps_a_longer_idle_timeout(self, culler, mock_server_app):
+        culler.update_settings({"terminalCullIdleTimeout": 20000})
+        self._terminal(mock_server_app, "1", timedelta(days=8))
+
+        assert await culler._cull_terminals() == ["1"]
+
+
+class TestCullTerminalOnRequest:
+    """DEF-CLI-22: the CLI's terminate reports what the registry says."""
+
+    @pytest.mark.asyncio
+    async def test_removed_terminal_reported_removed(self, culler, mock_server_app):
+        mock_server_app.terminal_manager.terminals = {"1": _pty_with_clients(0)}
+        mock_server_app.terminal_manager.terminate.side_effect = (
+            lambda n, force: mock_server_app.terminal_manager.terminals.pop(n)
+        )
+
+        assert await culler.cull_terminal("1") is True
+        mock_server_app.terminal_manager.terminate.assert_called_once_with("1", force=True)
+
+    @pytest.mark.asyncio
+    async def test_defunct_terminal_reaped(self, culler, mock_server_app):
+        pty = _pty_with_clients(0, alive=False)
+        mock_server_app.terminal_manager.terminals = {"3": pty}
+
+        assert await culler.cull_terminal("3") is True
+        mock_server_app.terminal_manager.on_eof.assert_called_once_with(pty)
+
+    @pytest.mark.asyncio
+    async def test_survivor_reported_not_removed(self, culler, mock_server_app):
+        mock_server_app.terminal_manager.terminals = {"3": _pty_with_clients(0, alive=True)}
+
+        assert await culler.cull_terminal("3") is False

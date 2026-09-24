@@ -22,10 +22,19 @@ class ResourceCuller:
         self._kernel_cull_idle_timeout = 60  # minutes (1 hour)
         self._terminal_cull_enabled = True
         self._terminal_cull_idle_timeout = 60  # minutes (1 hour)
+        # minutes (7 days); past this a terminal is culled even with an open tab
+        # or a workspace reference
+        self._terminal_cull_max_idle_timeout = 10080
         self._terminal_cull_disconnected_only = True  # only cull terminals with no active tab
         self._workspace_cull_enabled = True
         self._workspace_cull_idle_timeout = 10080  # minutes (7 days)
         self._cull_check_interval = 5  # minutes
+
+        # The values above are built-in defaults until the frontend's first
+        # settings POST, which a page left open across a server restart never
+        # re-sends. Workspace files outlive a restart, so workspace culling
+        # waits for the user's own settings instead of running on these.
+        self._settings_received = False
 
         # Last culling result for notification polling
         self._last_cull_result: dict[str, list[str]] = {
@@ -120,6 +129,7 @@ class ResourceCuller:
         "kernelCullIdleTimeout": ("_kernel_cull_idle_timeout", int),
         "terminalCullEnabled": ("_terminal_cull_enabled", bool),
         "terminalCullIdleTimeout": ("_terminal_cull_idle_timeout", int),
+        "terminalCullMaxIdleTimeout": ("_terminal_cull_max_idle_timeout", int),
         "terminalCullDisconnectedOnly": ("_terminal_cull_disconnected_only", bool),
         "workspaceCullEnabled": ("_workspace_cull_enabled", bool),
         "workspaceCullIdleTimeout": ("_workspace_cull_idle_timeout", int),
@@ -148,6 +158,7 @@ class ResourceCuller:
         old_interval = self._cull_check_interval
         for attr, value in validated.items():
             setattr(self, attr, value)
+        self._settings_received = True
 
         if self._cull_check_interval != old_interval and self._periodic_callback is not None:
             # Restart periodic callback with new interval
@@ -157,7 +168,8 @@ class ResourceCuller:
         logger.info(
             f"[Culler] Settings updated: kernel={self._kernel_cull_enabled}/{self._kernel_cull_idle_timeout}min, "
             f"terminal={self._terminal_cull_enabled}/{self._terminal_cull_idle_timeout}min"
-            f"(disconnected_only={self._terminal_cull_disconnected_only}), "
+            f"(max={self._terminal_cull_max_idle_timeout}min, "
+            f"disconnected_only={self._terminal_cull_disconnected_only}), "
             f"workspace={self._workspace_cull_enabled}/{self._workspace_cull_idle_timeout}min, "
             f"interval={self._cull_check_interval}min"
         )
@@ -169,6 +181,7 @@ class ResourceCuller:
             "kernelCullIdleTimeout": self._kernel_cull_idle_timeout,
             "terminalCullEnabled": self._terminal_cull_enabled,
             "terminalCullIdleTimeout": self._terminal_cull_idle_timeout,
+            "terminalCullMaxIdleTimeout": self._terminal_cull_max_idle_timeout,
             "terminalCullDisconnectedOnly": self._terminal_cull_disconnected_only,
             "workspaceCullEnabled": self._workspace_cull_enabled,
             "workspaceCullIdleTimeout": self._workspace_cull_idle_timeout,
@@ -215,8 +228,9 @@ class ResourceCuller:
         """Return protection status for all terminals.
 
         True when a terminal has an open tab OR is referenced by an existing
-        workspace (both protect it from culling); also True when workspace
-        references cannot be verified, so CLI consumers fail safe too.
+        workspace (both protect it from culling until the terminal maximum idle,
+        which this status does not apply); also True when workspace references
+        cannot be verified, so CLI consumers fail safe too.
         """
         result: dict[str, bool] = {}
         terminal_mgr = self.terminal_manager
@@ -318,8 +332,8 @@ class ResourceCuller:
     def _workspace_referenced_terminals(self) -> set[str] | None:
         """Terminal names referenced by any existing workspace's layout.
 
-        A terminal open in a workspace that has not been culled must never be
-        culled itself. Culling the workspace first releases its terminals -
+        A terminal open in a workspace that has not been culled is not culled
+        before the terminal maximum idle. Culling the workspace first releases its terminals -
         unless another not-yet-culled workspace still references them (the
         cascade). Workspace layouts store terminals as ``terminal:<name>``
         keys in their ``data`` section.
@@ -355,10 +369,12 @@ class ResourceCuller:
         try:
             for ws in ws_mgr.list_workspaces():
                 metadata = ws.get("metadata", {})
+                workspace_id = metadata.get("id", "unknown")
                 result.append({
-                    "id": metadata.get("id", "unknown"),
+                    "id": workspace_id,
                     "last_modified": metadata.get("last_modified"),
                     "created": metadata.get("created"),
+                    "protected": not self._is_cullable_workspace(workspace_id),
                 })
         except Exception as e:
             logger.error(f"[Culler] Failed to list workspaces: {e}")
@@ -376,7 +392,7 @@ class ResourceCuller:
 
         # Workspaces before terminals: a culled workspace releases the
         # terminals it referenced, so the cascade lands in the same pass
-        if self._workspace_cull_enabled:
+        if self._workspace_cull_enabled and self._settings_received:
             workspaces_culled = self._cull_workspaces()
 
         if self._terminal_cull_enabled:
@@ -445,6 +461,7 @@ class ResourceCuller:
         culled: list[str] = []
         now = datetime.now(timezone.utc)
         timeout_seconds = self._terminal_cull_idle_timeout * 60
+        max_seconds = self._terminal_cull_max_idle_timeout * 60
 
         terminal_mgr = self.terminal_manager
         if terminal_mgr is None:
@@ -457,7 +474,8 @@ class ResourceCuller:
             logger.error(f"[Culler] Failed to list terminals: {e}")
             return culled
 
-        # Terminals open in any not-yet-culled workspace are NEVER culled;
+        # Terminals open in any not-yet-culled workspace are not culled before
+        # the terminal maximum idle;
         # the workspace must be culled first, which releases them (cascade).
         # None means workspaces exist but could not be read - fail safe and
         # cull nothing rather than kill a possibly-referenced terminal.
@@ -481,86 +499,119 @@ class ResourceCuller:
                 if name is None:
                     continue
 
-                # Tab check FIRST (when the setting gates on it): an open-tab
-                # terminal is virtually always also workspace-referenced, and
-                # skipping on the reference alone would never stamp the grace
-                # anchor - the terminal would then be culled within one check
-                # interval of its reference disappearing (tab closed, workspace
-                # culled) instead of getting the documented full-timeout grace
-                if self._terminal_cull_disconnected_only:
-                    if self._terminal_has_active_tab(name):
-                        self._terminal_tab_last_seen[name] = now
-                        logger.debug(
-                            f"[Culler] Skipping terminal {name} - has active tab"
-                        )
-                        continue
-
-                if name in ws_referenced:
-                    logger.debug(
-                        f"[Culler] Skipping terminal {name} - open in a workspace"
-                    )
-                    continue
-
                 last_activity = terminal.get("last_activity")
-                if last_activity is None:
-                    continue
-
                 # Parse datetime if string
                 if isinstance(last_activity, str):
                     last_activity = datetime.fromisoformat(
                         last_activity.replace("Z", "+00:00")
                     )
-
                 # Ensure timezone-aware comparison
-                if last_activity.tzinfo is None:
+                if last_activity is not None and last_activity.tzinfo is None:
                     last_activity = last_activity.replace(tzinfo=timezone.utc)
 
-                # A terminal whose tab closed or disconnected becomes eligible one
-                # full idle timeout after that moment (the documented semantics),
-                # so a transient websocket loss - network blip, exhausted frontend
-                # reconnect attempts, sleep/wake - cannot cull it on the next check
-                if self._terminal_cull_disconnected_only:
-                    tab_last_seen = self._terminal_tab_last_seen.get(name)
-                    if tab_last_seen is not None and tab_last_seen > last_activity:
-                        last_activity = tab_last_seen
+                # Past the maximum idle nothing protects a terminal: not an open
+                # tab, not a workspace reference, not the tab-close grace. Measured
+                # from the last pty activity alone.
+                past_max = (
+                    last_activity is not None
+                    and (now - last_activity).total_seconds() > max_seconds
+                )
 
-                idle_seconds = (now - last_activity).total_seconds()
-                idle_minutes = idle_seconds / 60
+                if not past_max:
+                    # Tab check FIRST (when the setting gates on it): an open-tab
+                    # terminal is virtually always also workspace-referenced, and
+                    # skipping on the reference alone would never stamp the grace
+                    # anchor - the terminal would then be culled within one check
+                    # interval of its reference disappearing (tab closed, workspace
+                    # culled) instead of getting the documented full-timeout grace
+                    if self._terminal_cull_disconnected_only:
+                        if self._terminal_has_active_tab(name):
+                            self._terminal_tab_last_seen[name] = now
+                            logger.debug(
+                                f"[Culler] Skipping terminal {name} - has active tab"
+                            )
+                            continue
 
-                if idle_seconds > timeout_seconds:
-                    if name in self._terminal_cull_failed:
+                    if name in ws_referenced:
                         logger.debug(
-                            f"[Culler] Skipping terminal {name} - an earlier cull "
-                            "could not remove it"
+                            f"[Culler] Skipping terminal {name} - open in a workspace"
                         )
                         continue
 
+                    if last_activity is None:
+                        continue
+
+                    # A terminal whose tab closed or disconnected becomes eligible one
+                    # full idle timeout after that moment (the documented semantics),
+                    # so a transient websocket loss - network blip, exhausted frontend
+                    # reconnect attempts, sleep/wake - cannot cull it on the next check
+                    if self._terminal_cull_disconnected_only:
+                        tab_last_seen = self._terminal_tab_last_seen.get(name)
+                        if tab_last_seen is not None and tab_last_seen > last_activity:
+                            last_activity = tab_last_seen
+
+                    if (now - last_activity).total_seconds() <= timeout_seconds:
+                        continue
+
+                if name in self._terminal_cull_failed:
+                    logger.debug(
+                        f"[Culler] Skipping terminal {name} - an earlier cull "
+                        "could not remove it"
+                    )
+                    continue
+
+                idle_minutes = (now - last_activity).total_seconds() / 60
+                if past_max:
+                    logger.info(
+                        f"[Culler] CULLING TERMINAL {name} - idle {idle_minutes:.1f} minutes, "
+                        f"past the maximum ({self._terminal_cull_max_idle_timeout}); "
+                        "open tabs and workspace references do not protect it"
+                    )
+                else:
                     logger.info(
                         f"[Culler] CULLING TERMINAL {name} - idle {idle_minutes:.1f} minutes "
                         f"(threshold: {self._terminal_cull_idle_timeout})"
                     )
-                    # force=True matches jupyter_server_terminals' own culler: it is
-                    # the only path that reaches SIGKILL, so a shell that ignores
-                    # SIGHUP, SIGINT and SIGTERM does not survive the cull
-                    await terminal_mgr.terminate(name, force=True)
 
-                    if not self._terminal_removed(terminal_mgr, name):
-                        self._reap_defunct_terminal(terminal_mgr, name)
-
-                    if self._terminal_removed(terminal_mgr, name):
-                        logger.info(f"[Culler] Terminal {name} culled successfully")
-                        culled.append(name)
-                    else:
-                        self._terminal_cull_failed.add(name)
-                        logger.warning(
-                            f"[Culler] Terminal {name} is still registered after the "
-                            "cull; leaving it alone from now on"
-                        )
+                if await self._terminate_terminal(terminal_mgr, name):
+                    logger.info(f"[Culler] Terminal {name} culled successfully")
+                    culled.append(name)
+                else:
+                    self._terminal_cull_failed.add(name)
+                    logger.warning(
+                        f"[Culler] Terminal {name} is still registered after the "
+                        "cull; leaving it alone from now on"
+                    )
 
             except Exception as e:
                 logger.error(f"[Culler] Failed to cull terminal {name}: {e}")
 
         return culled
+
+    async def _terminate_terminal(self, terminal_mgr: Any, name: str) -> bool:
+        """Terminate a terminal and report whether it left the manager's registry."""
+        # force=True matches jupyter_server_terminals' own culler: it is
+        # the only path that reaches SIGKILL, so a shell that ignores
+        # SIGHUP, SIGINT and SIGTERM does not survive the cull
+        await terminal_mgr.terminate(name, force=True)
+
+        if not self._terminal_removed(terminal_mgr, name):
+            self._reap_defunct_terminal(terminal_mgr, name)
+
+        return self._terminal_removed(terminal_mgr, name)
+
+    async def cull_terminal(self, name: str) -> bool:
+        """Terminate one terminal on request (CLI), through the periodic cull's path.
+
+        jupyter's own ``DELETE /api/terminals/<name>`` answers 204 whether or not the
+        terminal left the registry and never reaches the defunct-pty reap, so the CLI
+        would report a terminal as culled that the next listing still shows. Raises
+        ``tornado.web.HTTPError`` 404 for an unknown name, as the terminal manager does.
+        """
+        terminal_mgr = self.terminal_manager
+        if terminal_mgr is None:
+            raise RuntimeError("terminal manager not available")
+        return await self._terminate_terminal(terminal_mgr, name)
 
     @staticmethod
     def _terminal_removed(terminal_mgr: Any, name: str) -> bool:
@@ -620,12 +671,14 @@ class ResourceCuller:
 
     @staticmethod
     def _is_cullable_workspace(workspace_id: str) -> bool:
-        """Only auto-generated workspaces (auto-0, auto-k, ...) are cull-eligible.
+        """Every workspace except the default layout is cull-eligible.
 
-        Named workspaces and the default/primary layout are always protected. A
-        leading slash (some clients store the id as ``/auto-0``) is normalized.
+        Named workspaces are eligible alongside auto-generated ones (auto-0,
+        auto-k, ...): a workspace saved once and never reopened would otherwise
+        keep its file, and every terminal its layout references, forever. A
+        leading slash (some clients store the id as ``/default``) is normalized.
         """
-        return workspace_id.lstrip("/").startswith("auto-")
+        return workspace_id.lstrip("/") != "default"
 
     def _cull_workspaces(self) -> list[str]:
         """Cull idle workspaces exceeding timeout threshold."""
@@ -651,7 +704,7 @@ class ResourceCuller:
                 if workspace_id is None:
                     continue
 
-                # Only auto-generated workspaces are eligible; named and default layouts are protected
+                # Every workspace except default is eligible
                 if not self._is_cullable_workspace(workspace_id):
                     logger.debug(f"[Culler] Skipping protected workspace {workspace_id}")
                     continue
@@ -721,7 +774,7 @@ class ResourceCuller:
                 if workspace_id is None:
                     continue
 
-                # Only auto-generated workspaces are eligible; named and default layouts are protected
+                # Every workspace except default is eligible
                 if not self._is_cullable_workspace(workspace_id):
                     continue
 

@@ -130,15 +130,15 @@ One important protection: the `default` workspace is never culled. That's your p
 
 ![Culling Decision Flow](images/article_culling_flow.svg)
 
-Every check cycle, the culler runs through all three resource types. Each has its own protection rules: busy kernels are skipped, terminals with open tabs are preserved, and the default workspace is always safe. Only resources that are genuinely idle and unattended get cleaned up.
+Every check cycle, the culler runs through all three resource types. Each has its own protection rules: busy kernels are skipped, terminals with open tabs are preserved until they reach the terminal maximum idle (7 days by default), and the default workspace is always safe. Only resources that are genuinely idle and unattended get cleaned up.
 
 Default settings:
 
-| Resource   | Timeout | Protection                     |
-| ---------- | ------- | ------------------------------ |
-| Kernels    | 60 min  | Busy kernels never culled      |
-| Terminals  | 60 min  | Open tabs never culled         |
-| Workspaces | 7 days  | Default workspace never culled |
+| Resource   | Timeout | Protection                       |
+| ---------- | ------- | -------------------------------- |
+| Kernels    | 60 min  | Busy kernels never culled        |
+| Terminals  | 60 min  | Open tabs kept up to 7 days idle |
+| Workspaces | 7 days  | Default workspace never culled   |
 
 All timeouts are configurable through JupyterLab's standard Settings Editor. No config files to edit. Change a setting, and it takes effect on the next check cycle.
 

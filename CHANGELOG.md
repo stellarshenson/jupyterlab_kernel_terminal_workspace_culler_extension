@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.26] - 2026-09-24
+
+### Added
+
+- "Terminal Maximum Idle" setting (`terminalCullMaxIdleTimeout`, default 10080 minutes = 7 days): a terminal with no input or output for that long is culled even with an open tab or a workspace reference; the terminal idle timeout default stays 60 minutes
+
+### Changed
+
+- Named workspaces are culled like auto-generated ones once idle past the workspace timeout (default 7 days); only the default workspace is kept. Stale named workspaces also stop protecting the terminals their layouts reference
+- `culler list` takes the `(protected)` workspace label from the server instead of repeating the server's rule
+- After a server restart, workspace culling waits until a JupyterLab page has sent the user's settings, so the built-in defaults never delete a workspace the user's own timeout would keep
+
+### Fixed
+
+- `culler cull` reports a terminal as culled only when the server removed it: it terminates through the extension, which also closes a terminal whose pty an orphaned process holds open, instead of jupyter's `DELETE /api/terminals/<name>`, which answers 204 either way
+
 ## [1.0.25] - 2026-09-03
 
 ### Fixed

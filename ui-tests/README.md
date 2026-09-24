@@ -45,6 +45,8 @@ cd ./ui-tests
 jlpm playwright test
 ```
 
+The suite starts its own JupyterLab on port 8888 and serves the working tree: the Python code from the repository and the labextension from the last `jlpm build`. It never reuses a server that is already running. When port 8888 is taken, pick a free one with `JUPYTER_TEST_PORT=8871 jlpm playwright test`.
+
 Test results will be shown in the terminal. In case of any test failures, the test report
 will be opened in your browser at the end of the tests execution; see
 [Playwright documentation](https://playwright.dev/docs/test-reporters#html-reporter)

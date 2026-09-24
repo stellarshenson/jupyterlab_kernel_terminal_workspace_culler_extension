@@ -181,6 +181,7 @@ class JupyterClient:
                     "id": w.get("id"),
                     "last_modified": w.get("last_modified"),
                     "created": w.get("created"),
+                    "protected": w.get("protected", False),
                     "idle_seconds": format_idle_seconds(w.get("last_modified")),
                     "idle_time": format_idle_time(w.get("last_modified")),
                 })
@@ -193,8 +194,23 @@ class JupyterClient:
         return self._delete(f"api/kernels/{kernel_id}")
 
     def terminate_terminal(self, name: str) -> bool:
-        """Terminate a terminal."""
-        return self._delete(f"api/terminals/{name}")
+        """Terminate a terminal; True only when the server removed it.
+
+        Goes through the extension rather than ``DELETE api/terminals/<name>``,
+        which answers 204 even when the terminal stays registered.
+        """
+        try:
+            url = urljoin(
+                self.server_url,
+                "jupyterlab-kernel-terminal-workspace-culler-extension/cull-terminal",
+            )
+            response = requests.post(
+                url, headers=self.headers, json={"name": name}, timeout=30
+            )
+            response.raise_for_status()
+            return response.json().get("removed") is True
+        except Exception:
+            return False
 
     def get_culler_status(self) -> dict | None:
         """Get culler status and settings from the extension."""
@@ -292,7 +308,7 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
         print(f"  Status: {'running' if running else 'stopped'}")
         print(f"  Check interval: {settings.get('cullCheckInterval', '?')} min")
         print(f"  Kernel culling: {'enabled' if settings.get('kernelCullEnabled') else 'disabled'}, timeout: {settings.get('kernelCullIdleTimeout', '?')} min")
-        print(f"  Terminal culling: {'enabled' if settings.get('terminalCullEnabled') else 'disabled'}, timeout: {settings.get('terminalCullIdleTimeout', '?')} min, disconnected-only: {settings.get('terminalCullDisconnectedOnly', '?')}")
+        print(f"  Terminal culling: {'enabled' if settings.get('terminalCullEnabled') else 'disabled'}, timeout: {settings.get('terminalCullIdleTimeout', '?')} min, maximum: {settings.get('terminalCullMaxIdleTimeout', '?')} min, disconnected-only: {settings.get('terminalCullDisconnectedOnly', '?')}")
         print(f"  Workspace culling: {'enabled' if settings.get('workspaceCullEnabled') else 'disabled'}, timeout: {settings.get('workspaceCullIdleTimeout', '?')} min")
     else:
         print("  (culler extension not available)")
@@ -324,8 +340,7 @@ def cmd_list(client: JupyterClient, args: argparse.Namespace) -> int:
     if workspaces:
         for w in workspaces:
             ws_id = w["id"] or "unknown"
-            # Server rule: everything not auto-* is protected (named + default)
-            protected = "" if ws_id.lstrip("/").startswith("auto-") else " (protected)"
+            protected = " (protected)" if w["protected"] else ""
             print(f"  {ws_id:12}  idle: {w['idle_time']:>8}{protected}")
     elif workspaces is None:
         print("  (culler extension unavailable)")
@@ -371,8 +386,7 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
         # from disconnected ones, and culling blind would kill connected terminals
         print(
             "Error: cannot determine terminal connection status (culler extension "
-            "unavailable); skipping terminal culling. Pass --include-connected to "
-            "cull terminals regardless of connection status.",
+            "unavailable); skipping terminal culling.",
             file=sys.stderr,
         )
         exit_code = 1

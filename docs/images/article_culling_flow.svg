@@ -249,6 +249,6 @@
   </g>
 
   <!-- Legend -->
-  <text x="12" y="214" font-family="Segoe UI, Arial, sans-serif" font-size="7" class="fg-4">Protected: busy kernels, terminals with open tabs, default workspace - never culled regardless of idle time</text>
+  <text x="12" y="214" font-family="Segoe UI, Arial, sans-serif" font-size="7" class="fg-4">Protected: busy kernels and the default workspace are never culled; terminals with open tabs are kept until they reach the terminal maximum idle (7 days by default)</text>
 
 </svg>

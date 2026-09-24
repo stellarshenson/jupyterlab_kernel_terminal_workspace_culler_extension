@@ -178,7 +178,7 @@ class CullWorkspacesHandler(APIHandler):
             timeout_minutes = data.get("timeout", 10080)  # default 7 days
             dry_run = data.get("dry_run", False)
             # exact types: a JSON true would otherwise compute a 60-SECOND
-            # threshold (True * 60) and delete every idle auto-* workspace
+            # threshold (True * 60) and delete every idle workspace except default
             if (
                 type(timeout_minutes) is not int
                 or timeout_minutes < 1
@@ -201,6 +201,36 @@ class CullWorkspacesHandler(APIHandler):
             self.finish(json.dumps({"error": str(e)}))
 
 
+class CullTerminalHandler(APIHandler):
+    """Handler for terminating one terminal via CLI."""
+
+    @tornado.web.authenticated
+    async def post(self) -> None:
+        """Terminate the named terminal; answer whether it left the registry.
+
+        An unknown name answers 404 (raised by the terminal manager).
+        """
+        if _culler is None:
+            self.set_status(503)
+            self.finish(json.dumps({"error": "Culler not initialized"}))
+            return
+
+        try:
+            data = json.loads(self.request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
+            self.set_status(400)
+            self.finish(json.dumps({"error": "Invalid JSON"}))
+            return
+        if not isinstance(data, dict) or not isinstance(data.get("name"), str):
+            self.set_status(400)
+            self.finish(json.dumps({"error": "Body must be a JSON object with a string name"}))
+            return
+
+        name = data["name"]
+        removed = await _culler.cull_terminal(name)
+        self.finish(json.dumps({"name": name, "removed": removed}))
+
+
 def setup_route_handlers(web_app: tornado.web.Application) -> None:
     """Set up route handlers for the extension."""
     host_pattern = ".*$"
@@ -215,6 +245,7 @@ def setup_route_handlers(web_app: tornado.web.Application) -> None:
         (url_path_join(base_url, namespace, "active-terminals"), ActiveTerminalsHandler),
         (url_path_join(base_url, namespace, "workspaces"), WorkspacesHandler),
         (url_path_join(base_url, namespace, "cull-workspaces"), CullWorkspacesHandler),
+        (url_path_join(base_url, namespace, "cull-terminal"), CullTerminalHandler),
     ]
 
     web_app.add_handlers(host_pattern, handlers)

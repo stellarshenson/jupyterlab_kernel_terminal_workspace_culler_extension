@@ -18,31 +18,32 @@ Automatically cull idle kernels, terminals, and workspaces after configurable ti
 ## Features
 
 - **Idle kernel culling** - Shut down kernels idle beyond timeout (checks `execution_state` and `last_activity`)
-- **Idle terminal culling** - Close terminals with no WebSocket activity beyond timeout
-- **Workspace culling** - Remove stale JupyterLab workspaces (auto-0, auto-k, etc.) based on last modified time
+- **Idle terminal culling** - Close terminals with no WebSocket activity beyond timeout, and any terminal idle beyond a maximum (7 days by default)
+- **Workspace culling** - Remove stale JupyterLab workspaces, named and auto-generated (auto-0, auto-k, etc.), based on last modified time; the default workspace is kept
 - **Configurable timeouts** - All timeouts adjustable via JupyterLab Settings
 - **Notifications** - Optional toast notifications when resources are culled (requires `jupyterlab-notifications`)
 - **Server-side detection** - Uses tornado PeriodicCallback for accurate activity tracking
 
 ## Default Settings
 
-| Setting           | Default            | Description                                         |
-| ----------------- | ------------------ | --------------------------------------------------- |
-| Kernel timeout    | 60 min (1 hour)    | Idle kernels culled after this period               |
-| Terminal timeout  | 60 min (1 hour)    | Inactive terminals culled after this period         |
-| Disconnected only | enabled            | Only cull terminals with no open browser tab        |
-| Workspace culling | enabled            | Cull stale workspaces (default workspace protected) |
-| Workspace timeout | 10080 min (7 days) | Stale workspaces culled after this period           |
-| Check interval    | 5 min              | How often the culler checks for idle resources      |
-| Notifications     | enabled            | Show notification when resources are culled         |
+| Setting           | Default            | Description                                                              |
+| ----------------- | ------------------ | ------------------------------------------------------------------------ |
+| Kernel timeout    | 60 min (1 hour)    | Idle kernels culled after this period                                    |
+| Terminal timeout  | 60 min (1 hour)    | Inactive terminals culled after this period                              |
+| Terminal maximum  | 10080 min (7 days) | Culled after this period even with an open tab or a workspace reference  |
+| Disconnected only | enabled            | Only cull terminals with no open browser tab, until the terminal maximum |
+| Workspace culling | enabled            | Cull stale workspaces (default workspace protected)                      |
+| Workspace timeout | 10080 min (7 days) | Stale workspaces culled after this period                                |
+| Check interval    | 5 min              | How often the culler checks for idle resources                           |
+| Notifications     | enabled            | Show notification when resources are culled                              |
 
 ## How Idle Detection Works
 
 **Kernels**: Checked for `execution_state` (busy kernels are never culled) and `last_activity` timestamp. A kernel is idle when it's not executing and hasn't had activity beyond the timeout.
 
-**Terminals**: A terminal referenced by any existing workspace is never culled - the workspace must be culled first, which releases its terminals unless another surviving workspace still references them (the cascade). Beyond that, only terminals with no active browser tab are culled by default (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and won't be culled regardless of idle time. Once the tab is closed or disconnected, the terminal becomes eligible for culling one full idle timeout later. A terminal counts as culled only once the server has actually removed it: a terminal whose shell has exited but whose pty is still held open by a surviving process is closed the way an end-of-file would have closed it, and a terminal that survives a cull anyway is attempted once and then left alone.
+**Terminals**: A terminal referenced by any existing workspace is not culled - the workspace must be culled first, which releases its terminals unless another surviving workspace still references them (the cascade). Beyond that, only terminals with no active browser tab are culled by default (controlled by "Only Cull Disconnected Terminals" setting). When a terminal tab is open, it maintains a WebSocket connection and the terminal is kept. Once the tab is closed or disconnected, the terminal becomes eligible for culling one full idle timeout later. None of this protection lasts past the terminal maximum idle ("Terminal Maximum Idle", 7 days by default): a terminal with no input or output for that long is culled even with an open tab or a workspace reference. A terminal counts as culled only once the server has actually removed it: a terminal whose shell has exited but whose pty is still held open by a surviving process is closed the way an end-of-file would have closed it, and a terminal that survives a cull anyway is attempted once and then left alone.
 
-**Workspaces**: Based on the workspace file's `last_modified` timestamp. JupyterLab creates auto-named workspaces (auto-0, auto-k, etc.) when you open multiple windows. Only auto-named workspaces are culled - the default workspace and named workspaces are never culled. Culling a workspace releases the terminals it referenced, so they can be culled in the same pass (the cascade).
+**Workspaces**: Based on the workspace file's `last_modified` timestamp. Every workspace except the default one is culled once idle past the workspace timeout: the auto-named workspaces (auto-0, auto-k, etc.) JupyterLab creates when you open multiple windows, and named workspaces you saved yourself. Culling a workspace releases the terminals it referenced, so they can be culled in the same pass (the cascade).
 
 > **Note**: Terminal culling signals the terminal's own shell, starting with SIGHUP and escalating through SIGINT and SIGTERM to SIGKILL if it does not exit. Processes started with `nohup`, `screen` or `tmux` are detached from that shell and survive culling.
 
@@ -77,7 +78,7 @@ Run JupyterLab with `--log-level=INFO` to see culling activity.
 
 Two options:
 
-1. **Increase timeout**: Go to `Settings` -> `Settings Editor` -> `Resource Culler` and increase the kernel/terminal timeout
+1. **Increase timeout**: Go to `Settings` -> `Settings Editor` -> `Resource Culler` and increase the kernel/terminal timeout; for a terminal that stays open in a tab, increase "Terminal Maximum Idle"
 2. **Use a terminal multiplexer**: Run calculations inside `screen` or `tmux` - these survive terminal culling
 
 ```bash
@@ -94,7 +95,7 @@ python long_calculation.py
 
 **Q: Will closing my browser tab kill my running process?**
 
-For terminals: By default, terminals are only culled when the browser tab is closed (disconnected). After closing the tab, the terminal will be culled once the idle timeout expires. Foreground processes receive SIGHUP. Use `nohup`, `screen`, or `tmux` for processes that must survive.
+For terminals: By default a terminal with an open browser tab is kept until it has had no input or output for the terminal maximum idle (7 days by default), even while a command runs; after the tab closes, it is culled once the idle timeout expires unless a workspace still references it; closing the browser tab leaves the terminal in the saved workspace, which keeps it until that workspace is culled or the terminal maximum idle passes. Foreground processes receive SIGHUP. Use `nohup`, `screen`, or `tmux` for processes that must survive.
 
 For kernels: The kernel continues running. Activity is tracked server-side, so a busy kernel won't be culled even if the browser is closed.
 
@@ -139,11 +140,11 @@ jupyterlab_kernel_terminal_workspace_culler cull --kernel-timeout 30 --terminal-
 # Cull workspaces idle > 1 minute (default is 7 days)
 jupyterlab_kernel_terminal_workspace_culler cull --workspace-timeout 1
 
-# Also cull terminals that still have an open browser tab (default: skip them)
+# Also cull terminals with an open browser tab or a workspace reference (default: skip them)
 jupyterlab_kernel_terminal_workspace_culler cull --include-connected
 ```
 
-By default `cull` skips terminals with an open browser tab, matching the extension's disconnected-only behavior. Pass `--include-connected` to cull them anyway.
+By default `cull` skips terminals with an open browser tab or a workspace reference; unlike the extension, it does not apply the terminal maximum idle. Pass `--include-connected` to cull them anyway. A terminal is printed as `culled` only when the server removed it; one that is still registered afterwards is printed as `failed`. `list` marks the workspaces the server never culls as `(protected)`.
 
 The CLI auto-discovers running Jupyter servers. You can also set environment variables:
 

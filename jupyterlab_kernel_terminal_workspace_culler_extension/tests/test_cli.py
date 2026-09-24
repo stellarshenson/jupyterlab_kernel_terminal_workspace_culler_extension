@@ -2,10 +2,14 @@
 
 import argparse
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from jupyterlab_kernel_terminal_workspace_culler_extension.cli import (
+    JupyterClient,
     cmd_cull,
+    cmd_list,
     resolve_server_url_and_token,
 )
 
@@ -89,6 +93,65 @@ class TestCmdCullFailClosed:
 
         assert rc == 1
         assert "workspaces" in capsys.readouterr().err
+
+
+class TestTerminateReportsRemoval:
+    """DEF-CLI-22: culled means the server removed the terminal from its registry."""
+
+    @staticmethod
+    def _response(payload=None, status=200):
+        response = MagicMock()
+        response.json.return_value = payload
+        if status >= 400:
+            response.raise_for_status.side_effect = requests.HTTPError(str(status))
+        return response
+
+    def test_goes_through_the_extension_route(self):
+        client = JupyterClient("http://127.0.0.1:8888/", "tok")
+        with patch("requests.post", return_value=self._response({"removed": True})) as post:
+            assert client.terminate_terminal("3") is True
+
+        url = post.call_args.args[0]
+        assert url.endswith("jupyterlab-kernel-terminal-workspace-culler-extension/cull-terminal")
+        assert post.call_args.kwargs["json"] == {"name": "3"}
+
+    def test_terminal_still_registered_is_a_failure(self):
+        client = JupyterClient("http://127.0.0.1:8888/")
+        with patch("requests.post", return_value=self._response({"removed": False})):
+            assert client.terminate_terminal("3") is False
+
+    def test_route_error_is_a_failure(self):
+        client = JupyterClient("http://127.0.0.1:8888/")
+        with patch("requests.post", return_value=self._response(status=404)):
+            assert client.terminate_terminal("3") is False
+
+    def test_failure_printed_as_failed(self, capsys):
+        client = _client([_idle_terminal("3", 120)], connection={"3": False})
+        client.terminate_terminal.return_value = False
+
+        cmd_cull(client, _args())
+
+        assert "3  idle: 120m  (failed)" in capsys.readouterr().out
+
+
+class TestListProtectedLabel:
+    """The protected label is the server's rule, not a copy of it in the CLI."""
+
+    def test_only_server_protected_workspaces_marked(self, capsys):
+        client = _client([], connection={})
+        client.get_culler_status.return_value = None
+        client.list_workspaces.return_value = [
+            {"id": wid, "protected": wid == "default", "idle_time": "8.0d"}
+            for wid in ("auto-0", "default", "probe")
+        ]
+
+        cmd_list(client, argparse.Namespace(json=False))
+
+        lines = {line.split()[0]: line for line in capsys.readouterr().out.splitlines()
+                 if line.startswith("  ") and "idle:" in line}
+        assert "(protected)" in lines["default"]
+        assert "(protected)" not in lines["auto-0"]
+        assert "(protected)" not in lines["probe"]
 
 
 class TestServerResolution:

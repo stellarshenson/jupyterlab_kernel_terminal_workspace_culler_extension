@@ -10,11 +10,12 @@
 
 the periodic terminal culler: which terminals it may end, and whether it really ended them
 
-- [x] `DEF-TERM-1` **multi-client active-terminals clobber culls a connected terminal** - MAJOR; MEDIUM-HIGH; backend kept one global active-terminals set that every frontend POST replaced wholesale, so a second tab reporting `[]` wiped the protection and an idle-but-open terminal got SIGHUP'd; cause: single shared `set[str]`, last-writer-wins; fix: per-client tracking keyed by `clientId` with a stale-after-2-intervals TTL union; `culler.py`, `routes.py`, `src/index.ts`
+- [x] `DEF-TERM-1` **multi-client active-terminals clobber culls a connected terminal** - MAJOR; backend kept one global active-terminals set that every frontend POST replaced wholesale, so a second tab reporting `[]` wiped the protection and an idle-but-open terminal got SIGHUP'd; cause: single shared `set[str]`, last-writer-wins; fix: per-client tracking keyed by `clientId` with a stale-after-2-intervals TTL union; `culler.py`, `routes.py`, `src/index.ts`
   - log: 2026-07-15T00:00:00Z @kj reported: bug-hunter adversarial review, Round 1
   - log: 2026-07-15T00:00:00Z @kj fixed: `_active_terminals_by_client` union + TTL prune; frontend sends a stable per-load `clientId`; pytest 32 green
   - log: 2026-07-15T00:00:00Z @kj hardened: Round 2 review flagged a tight TTL grace; widened to 3 intervals and the frontend now re-reports immediately when it (re)arms the interval
   - log: 2026-09-03T16:15:12Z @kj edited severity
+  - log: 2026-09-24T13:22:46Z @kj amended text "MEDIUM-HIGH; backend kept one global active-terminals set that every frontend POST replaced wholesale, so a second tab reporting `[]` wiped the protection and an idle-but-open terminal got SIGHUP'd; cause: single shared `set[str]`, last-writer-wins; fix: per-client tracking keyed by `clientId` with a stale-after-2-intervals TTL union; `culler.py`, `routes.py`, `src/index.ts`" -> "backend kept one global active-terminals set that every frontend POST replaced wholesale, so a second tab reporting `[]` wiped the protection and an idle-but-open terminal got SIGHUP'd; cause: single shared `set[str]`, last-writer-wins; fix: per-client tracking keyed by `clientId` with a stale-after-2-intervals TTL union; `culler.py`, `routes.py`, `src/index.ts`"
 - [x] `DEF-TERM-9` **open-tab terminal culled when its browser tab is throttled** - MAJOR; a terminal with an open tab in a backgrounded/frozen browser tab (or a slept laptop) got culled: browsers throttle timers, the frontend report goes stale past the 3-interval TTL, and protection vanished; README promised the WebSocket check but the code only ever trusted frontend reports; cause: `_terminal_has_active_tab` used report union only; fix: check terminado's `PtyWithClients.clients` (live websocket per open tab, throttle-immune) as ground truth, reports remain a secondary signal; `culler.py`
   - log: 2026-07-16T00:00:00Z @kj reported: user observed terminals with open tabs being culled despite DEF-1 fix
   - log: 2026-07-16T00:00:00Z @kj fixed: `_terminal_has_ws_client` checks `terminal_manager.terminals[name].clients`; `_terminal_has_active_tab` ORs it with the report union; falls back to reports for managers without a `.terminals` registry; 5 new tests, 37 pytest green
@@ -48,10 +49,12 @@ the periodic terminal culler: which terminals it may end, and whether it really 
 
 workspace culling and the directory it reads, including the cascade that releases a culled workspace's terminals
 
-- [x] `DEF-WSPACE-2` **workspace culler deleted named workspaces, not just auto-\** - MEDIUM; * - MEDIUM; docs and schema scope culling to "auto-0, auto-k, etc." but the code culled every non-default workspace past timeout, so a saved named layout was removed after 7 days; cause: guard skipped only `id == "default"`; fix: restrict eligibility to ids starting `auto-` via `_is_cullable_workspace`; `culler.py`
+- [x] `DEF-WSPACE-2` **workspace culler deleted named workspaces, not only auto workspaces** - MEDIUM; docs and schema scope culling to "auto-0, auto-k, etc." but the code culled every non-default workspace past timeout, so a saved named layout was removed after 7 days; cause: guard skipped only `id == "default"`; fix: restrict eligibility to ids starting `auto-` via `_is_cullable_workspace`; `culler.py`
   - log: 2026-07-15T00:00:00Z @kj reported: bug-hunter review; confirmed against `schema/plugin.json` scope text
   - log: 2026-07-15T00:00:00Z @kj fixed: auto-only eligibility in `_cull_workspaces` and `cull_workspaces_with_timeout`
   - log: 2026-09-03T16:15:12Z @kj edited severity
+  - log: 2026-09-24T13:22:52Z @kj amended title "workspace culler deleted named workspaces, not just auto-\" -> "workspace culler deleted named workspaces, not only auto workspaces"; text "* - MEDIUM; docs and schema scope culling to "auto-0, auto-k, etc." but the code culled every non-default workspace past timeout, so a saved named layout was removed after 7 days; cause: guard skipped only `id == "default"`; fix: restrict eligibility to ids starting `auto-` via `_is_cullable_workspace`; `culler.py`" -> "docs and schema scope culling to "auto-0, auto-k, etc." but the code culled every non-default workspace past timeout, so a saved named layout was removed after 7 days; cause: guard skipped only `id == "default"`; fix: restrict eligibility to ids starting `auto-` via `_is_cullable_workspace`; `culler.py`"
+  - log: 2026-09-24T14:22:33Z @kj superseded 2026-09-24: requirement changed, named workspaces are culled again with only `default` exempt (DEF-WSPACE-23)
 - [x] `DEF-WSPACE-3` **hardcoded workspaces directory ignores JUPYTER_CONFIG_DIR** - MINOR; workspace culling silently no-op'd where the jupyter config dir is relocated because the path was pinned to `~/.jupyter/lab/workspaces`; cause: `Path.home() / ".jupyter"` literal; fix: derive from `jupyter_core.paths.jupyter_config_dir()`; `culler.py`
   - log: 2026-07-15T00:00:00Z @kj reported: found during triage (reviewer missed it); fails safe but wrong
   - log: 2026-07-15T00:00:00Z @kj fixed: workspaces_dir now resolves from the active config dir
@@ -62,6 +65,24 @@ workspace culling and the directory it reads, including the cascade that release
 - [x] `DEF-WSPACE-4` **default-workspace guard was a brittle exact string match** - MINOR; `id == "default"` would miss a `/default` form and could delete the primary layout on other clients; cause: unnormalized compare; fix: auto-only eligibility normalizes a leading slash so default and named ids never match; `culler.py`
   - log: 2026-07-15T00:00:00Z @kj reported: bug-hunter review, suspicion; held on this install
   - log: 2026-07-15T00:00:00Z @kj fixed: subsumed by the `auto-`-prefix guard (DEF-2)
+- [x] `DEF-WSPACE-23` **named workspaces never culled** - MAJOR; named workspaces (`probe`, `shot`, `claudecheck` and 5 more, listed on 2026-08-14) stay in `~/.jupyter/lab/workspaces` at any age; their `terminal:<name>` keys also keep the terminals they list from ever being culled; `culler.py`
+  - evidence: tests/test_culler.py::TestCullWorkspaces::test_named_workspace_culled and test_named_and_auto_culled_default_kept, TestWorkspaceTerminalProtection::test_cascade_through_named_workspace, tests/test_functional.py::test_named_workspaces_culled_default_kept and test_culled_named_workspace_releases_its_terminal (real server, real workspace files); all fail on the HEAD culler, pass on the fix
+  - related: DEF-WSPACE-2 - the fix that narrowed eligibility to auto-* workspaces
+  - repro: save a named workspace, set its file mtime 8 days back, run one cull pass: the file stays
+  - test-tags: UNIT, FUNCTIONAL
+  - root-cause: 2026-09-24T13:22:58Z @kj `_is_cullable_workspace` accepts only ids starting `auto-`, so every named workspace is protected the same way as `default`
+  - log: 2026-09-24T13:22:58Z @kj added
+  - log: 2026-09-24T13:23:08Z @kj amended text "named workspaces (`probe`, `shot`, `claudecheck` and 5 more) stayed in `~/.jupyter/lab/workspaces` for weeks past the 7-day timeout and were deleted by hand on 2026-09-24; their `terminal:<name>` keys also kept the terminals they list from ever being culled; `culler.py`" -> "named workspaces (`probe`, `shot`, `claudecheck` and 5 more, listed on 2026-08-14) stay in `~/.jupyter/lab/workspaces` at any age; their `terminal:<name>` keys also keep the terminals they list from ever being culled; `culler.py`"
+  - log: 2026-09-24T14:22:33Z @kj fixed: `_is_cullable_workspace` exempts only `default`; the periodic pass also waits for the first settings POST so built-in defaults never delete a workspace after a restart; `culler.py`
+  - log: 2026-09-24T14:22:33Z @kj closed: verified: 97 pytest and 3 Playwright green; five-lens adversarial review ended SHIP in round 5
+- [x] `DEF-WSPACE-24` **restarted server culls workspaces on built-in defaults** - MAJOR; after a server restart the culler runs on its built-in 7-day workspace timeout until a page POSTs the user's settings, so a named workspace the user's longer timeout keeps is deleted; found by the adversarial review of DEF-WSPACE-23 before release; `culler.py`
+  - evidence: tests/test_culler.py::TestCullWorkspaces::test_workspaces_wait_for_the_users_settings (no delete before settings, delete after), the functional workspace tests POST settings first; 97 pytest green
+  - related: DEF-WSPACE-23 - the change that made named workspaces eligible and exposed this
+  - repro: set workspaceCullIdleTimeout to 30 days, restart the server without opening a page, wait one check interval: a 10-day-old named workspace is deleted
+  - test-tags: UNIT, FUNCTIONAL
+  - root-cause: 2026-09-24T14:22:33Z @kj settings live only in memory and arrive with the frontend's first POST; a page left open across a restart never re-sends them
+  - log: 2026-09-24T14:22:33Z @kj added
+  - log: 2026-09-24T14:22:33Z @kj closed: fixed: workspace culling in the periodic pass waits for the first valid settings POST (`_settings_received`); the CLI path is unaffected
 
 ## Settings `CONFIG`
 
@@ -100,12 +121,16 @@ the `culler` command line: server discovery, authentication, and what it reports
 - [x] `DEF-CLI-18` **CLI workspace culling failed open and silent** - MINOR; against a server without the extension, `cull` printed "No workspaces to cull" and exited 0 while eligible workspaces existed, and `list` showed "(none)" - the opposite of the DEF-10 fail-closed semantics; cause: `cull_workspaces`/`list_workspaces` swallowed every exception into `[]`, indistinguishable from "nothing eligible"; fix: both return None on endpoint failure; `cull` reports a stderr error and exit 1, `list` shows "(culler extension unavailable)"; `cli.py`
   - log: 2026-07-16T00:00:00Z @kj reported: adversarial review round 2
   - log: 2026-07-16T00:00:00Z @kj fixed: None-propagating endpoints + fail-visible handling in both commands
-- [ ] `DEF-CLI-22` **CLI reports a defunct terminal as terminated** - MINOR; `culler cull` terminates through jupyter's own `DELETE /api/terminals/<name>`, which answers 204 whether or not the terminal left the registry, so a terminal held open by a process that outlived its shell is printed as terminated and is still listed by the next `culler list`; the periodic culler reaps that case since DEF-TERM-21, the CLI cannot, because no route exposes the reap; `cli.py`
+- [x] `DEF-CLI-22` **CLI reports a defunct terminal as terminated** - MINOR; `culler cull` terminates through jupyter's own `DELETE /api/terminals/<name>`, which answers 204 whether or not the terminal left the registry, so a terminal held open by a process that outlived its shell is printed as terminated and is still listed by the next `culler list`; the periodic culler reaps that case since DEF-TERM-21, the CLI cannot, because no route exposes the reap; `cli.py`
+  - evidence: tests/test_functional.py::test_cli_reports_defunct_terminal_removed (a real orphan holds the pty; `culler cull --json` prints culled and the next listing no longer has the terminal), tests/test_culler.py::TestCullTerminalOnRequest, tests/test_cli.py::TestTerminateReportsRemoval; the functional test fails on the HEAD CLI
   - related: DEF-TERM-21 - the same defunct-pty case, reached through the REST path the periodic culler does not use
   - repro: leave a stopped process holding a pty after its shell exits, then run `culler cull --terminal-timeout 1`: it prints the terminal as terminated and `culler list` still shows it
-  - test-tags: UNIT
+  - test-tags: UNIT, FUNCTIONAL
   - root-cause: 2026-09-03T16:15:12Z @kj the reap lives in the server-side culler and there is no route to reach it from outside; `jupyter_server_terminals/api_handlers.py:83` calls `terminate(name, force=True)` and returns 204 unconditionally
   - log: 2026-09-03T16:15:12Z @kj added
+  - log: 2026-09-24T14:22:33Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
+  - log: 2026-09-24T14:22:33Z @kj fixed: new POST `cull-terminal` route runs the periodic cull's terminate, reap and registry check (`ResourceCuller.cull_terminal`); the CLI terminates through it and prints `failed` when the terminal stays registered; `routes.py`, `culler.py`, `cli.py`
+  - log: 2026-09-24T14:22:33Z @kj closed: verified: 97 pytest green; five-lens adversarial review ended SHIP in round 5
 
 ## Tests `TESTS`
 

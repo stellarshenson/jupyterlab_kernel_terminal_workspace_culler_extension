@@ -70,6 +70,9 @@ async def test_non_object_bodies_rejected(jp_fetch):
         ("settings", "5"),
         ("active-terminals", "[]"),
         ("cull-workspaces", '"x"'),
+        ("cull-terminal", "[]"),
+        ("cull-terminal", "{}"),
+        ("cull-terminal", '{"name": 3}'),
     ):
         with pytest.raises(tornado.httpclient.HTTPClientError) as exc_info:
             await jp_fetch(NAMESPACE, endpoint, method="POST", body=body)
@@ -81,7 +84,7 @@ async def test_invalid_utf8_body_rejected(jp_fetch):
     import tornado.httpclient
     import pytest
 
-    for endpoint in ("settings", "active-terminals", "cull-workspaces"):
+    for endpoint in ("settings", "active-terminals", "cull-workspaces", "cull-terminal"):
         with pytest.raises(tornado.httpclient.HTTPClientError) as exc_info:
             await jp_fetch(NAMESPACE, endpoint, method="POST", body=b"{\xff}")
         assert exc_info.value.code == 400, endpoint

@@ -16,19 +16,23 @@ which terminals the periodic culler may end, and how it knows one really ended
   - test-tags: UNIT
   - log: 2026-09-03T15:59:07Z @kj added
   - log: 2026-09-03T15:59:07Z @kj closed
-- [x] `ACC-TERM-2` **Open tab protects** - CRITICAL; a terminal with a live terminado websocket client is never culled, whatever the frontend reports say
+- [x] `ACC-TERM-2` **Open tab protects** - CRITICAL; a terminal with a live terminado websocket client is not culled before `terminalCullMaxIdleTimeout`, whatever the frontend reports say
   - related: DEF-TERM-9 - the throttled-tab cull this prevents
+  - related: ACC-TERM-36 - the maximum idle that ends this protection
   - evidence: tests/test_culler.py::TestWebsocketTabProtection::test_ws_connected_terminal_not_culled_without_reports and test_ws_connected_terminal_not_culled_with_stale_reports
   - test: register a pty carrying one attached client, assert terminate is not called
   - test-tags: UNIT
   - log: 2026-09-03T15:59:07Z @kj added
   - log: 2026-09-03T15:59:07Z @kj closed
-- [x] `ACC-TERM-3` **Frontend report protects** - HIGH; a terminal named in any client's active-terminals report, inside that client's TTL, is never culled
+  - log: 2026-09-24T13:23:20Z @kj amended text "a terminal with a live terminado websocket client is never culled, whatever the frontend reports say" -> "a terminal with a live terminado websocket client is not culled before `terminalCullMaxIdleTimeout`, whatever the frontend reports say"
+- [x] `ACC-TERM-3` **Frontend report protects** - HIGH; a terminal named in any client's active-terminals report, inside that client's TTL, is not culled before `terminalCullMaxIdleTimeout`
+  - related: ACC-TERM-36 - the maximum idle that ends this protection
   - evidence: tests/test_culler.py::TestCullIdleTerminal::test_connected_terminal_not_culled
   - test: post one client report naming the terminal, assert terminate is not called
   - test-tags: UNIT
   - log: 2026-09-03T15:59:07Z @kj added
   - log: 2026-09-03T15:59:08Z @kj closed
+  - log: 2026-09-24T13:23:20Z @kj amended text "a terminal named in any client's active-terminals report, inside that client's TTL, is never culled" -> "a terminal named in any client's active-terminals report, inside that client's TTL, is not culled before `terminalCullMaxIdleTimeout`"
 - [x] `ACC-TERM-4` **One client cannot clobber another** - HIGH; a client reporting no terminals never removes protection another client reported
   - evidence: tests/test_culler.py::TestActiveTerminals::test_empty_report_does_not_clobber and test_union_across_clients
   - test: two clients, one reporting the terminal and one reporting none, assert terminate is not called
@@ -47,13 +51,15 @@ which terminals the periodic culler may end, and how it knows one really ended
   - test-tags: UNIT
   - log: 2026-09-03T15:59:08Z @kj added
   - log: 2026-09-03T15:59:08Z @kj closed
-- [x] `ACC-TERM-7` **Workspace reference protects** - CRITICAL; a terminal referenced by any existing workspace is never culled
+- [x] `ACC-TERM-7` **Workspace reference protects** - CRITICAL; a terminal referenced by any existing workspace is not culled before `terminalCullMaxIdleTimeout`
   - related: DEF-TERM-19 - the grace-anchor ordering behind the cascade
+  - related: ACC-TERM-36 - the maximum idle that ends this protection
   - evidence: tests/test_culler.py::TestWorkspaceTerminalProtection::test_workspace_referenced_terminal_never_culled
   - test: list a workspace holding `terminal:1` in its data, assert terminal 1 is not culled
   - test-tags: UNIT
   - log: 2026-09-03T15:59:08Z @kj added
   - log: 2026-09-03T15:59:08Z @kj closed
+  - log: 2026-09-24T13:23:20Z @kj amended text "a terminal referenced by any existing workspace is never culled" -> "a terminal referenced by any existing workspace is not culled before `terminalCullMaxIdleTimeout`"
 - [x] `ACC-TERM-8` **Edge: workspace references unreadable** - CRITICAL; when the workspace listing fails, no terminal is culled in that pass
   - evidence: tests/test_culler.py::TestWorkspaceTerminalProtection::test_listing_failure_fails_safe
   - test: raise from list_workspaces, assert terminate is not called
@@ -98,29 +104,46 @@ which terminals the periodic culler may end, and how it knows one really ended
   - test-tags: UNIT
   - log: 2026-09-03T15:59:09Z @kj added
   - log: 2026-09-03T15:59:09Z @kj closed
+- [x] `ACC-TERM-36` **Maximum idle ends a protected terminal** - HIGH; a terminal idle past `terminalCullMaxIdleTimeout` is terminated even with an open tab, a fresh frontend report or a workspace reference
+  - evidence: tests/test_culler.py::TestTerminalMaxIdle::test_open_tab_and_reference_do_not_protect_past_max, test_protected_below_max, test_max_setting_respected; tests/test_functional.py::test_maximum_idle_ends_open_referenced_terminal (real terminado terminals with attached websockets: the 8-day-idle one culled, the 2-hour one kept)
+  - test: terminal with an attached websocket client and a workspace reference, last activity 8 days old, assert terminate is called
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-09-24T13:23:08Z @kj added
+  - log: 2026-09-24T14:22:46Z @kj closed: verified
+- [x] `ACC-TERM-37` **Edge: tab grace does not extend the maximum** - MEDIUM; the maximum is measured from the last pty activity; the grace a closed tab grants delays only `terminalCullIdleTimeout`
+  - evidence: tests/test_culler.py::TestTerminalMaxIdle::test_tab_grace_does_not_extend_max and test_max_caps_a_longer_idle_timeout
+  - test: tab seen 1 minute ago, last activity 8 days old, assert terminate is called
+  - test-tags: UNIT
+  - log: 2026-09-24T13:23:08Z @kj added
+  - log: 2026-09-24T14:22:46Z @kj closed: verified
 
 ## Workspace culling `WSPACE`
 
 which workspaces are cull-eligible, where they are read from, and the cascade into their terminals
 
-- [x] `ACC-WSPACE-15` **Auto workspaces only** - CRITICAL; only ids starting `auto-` are cull-eligible; a named workspace is never deleted
-  - evidence: tests/test_culler.py::TestCullWorkspaces::test_cull_auto_only and test_named_workspace_preserved
+- [-] `ACC-WSPACE-15` **Auto workspaces only** - CRITICAL; only ids starting `auto-` are cull-eligible; a named workspace is never deleted
+  - related: ACC-WSPACE-35 - the criterion that replaces it
   - test: list one auto-0 and one named workspace past the timeout, assert only auto-0 is deleted
   - test-tags: UNIT
   - log: 2026-09-03T15:59:09Z @kj added
   - log: 2026-09-03T15:59:09Z @kj closed
+  - log: 2026-09-24T13:23:08Z @kj rejected: requirement changed 2026-09-24: named workspaces are culled too (DEF-WSPACE-23); replaced by the named-workspace criterion below
+  - log: 2026-09-24T13:23:32Z @kj reopened: reopened to retire the evidence of the auto-only rule before rejecting; evidence retired: tests/test_culler.py::TestCullWorkspaces::test_cull_auto_only and test_named_workspace_preserved
+  - log: 2026-09-24T13:23:35Z @kj rejected: requirement changed 2026-09-24: named workspaces are culled too (DEF-WSPACE-23); replaced by ACC-WSPACE-35
 - [x] `ACC-WSPACE-16` **Default layout never culled** - CRITICAL; the default workspace is never deleted, with or without a leading slash
   - evidence: tests/test_culler.py::TestCullWorkspaces::test_default_never_culled
   - test: list `default` and `/default` past the timeout, assert delete is not called
   - test-tags: UNIT
   - log: 2026-09-03T15:59:09Z @kj added
   - log: 2026-09-03T15:59:09Z @kj closed
-- [x] `ACC-WSPACE-17` **Idle threshold honoured** - HIGH; an `auto-*` workspace younger than `workspaceCullIdleTimeout` is kept
-  - evidence: tests/test_culler.py::TestCullWorkspaces::test_recent_auto_not_culled
+- [x] `ACC-WSPACE-17` **Idle threshold honoured** - HIGH; a workspace younger than `workspaceCullIdleTimeout` is kept
+  - evidence: tests/test_culler.py::TestCullWorkspaces::test_recent_workspace_not_culled (a recent auto-0 and a recent named workspace are both kept)
   - test: list a recently used auto-0, assert delete is not called
   - test-tags: UNIT
   - log: 2026-09-03T15:59:09Z @kj added
   - log: 2026-09-03T15:59:09Z @kj closed
+  - log: 2026-09-24T13:23:08Z @kj amended text "an `auto-*` workspace younger than `workspaceCullIdleTimeout` is kept" -> "a workspace younger than `workspaceCullIdleTimeout` is kept"
+  - log: 2026-09-24T14:22:46Z @kj edited evidence "tests/test_culler.py::TestCullWorkspaces::test_recent_auto_not_culled" -> "tests/test_culler.py::TestCullWorkspaces::test_recent_workspace_not_culled (a recent auto-0 and a recent named workspace are both kept)"
 - [x] `ACC-WSPACE-18` **Cascade order** - HIGH; workspaces are culled before terminals, so a workspace culled this pass releases its terminals in the same pass
   - evidence: tests/test_culler.py::TestWorkspaceTerminalProtection::test_cascade_workspace_culled_then_terminal
   - test: idle auto-0 referencing terminal 1, assert both go in one call to the culler
@@ -145,6 +168,20 @@ which workspaces are cull-eligible, where they are read from, and the cascade in
   - test-tags: UNIT
   - log: 2026-09-03T15:59:09Z @kj added
   - log: 2026-09-03T15:59:10Z @kj closed
+- [x] `ACC-WSPACE-35` **Every workspace but default is eligible** - CRITICAL; a named or `auto-*` workspace idle past `workspaceCullIdleTimeout` is deleted; only `default` is exempt
+  - evidence: tests/test_culler.py::TestCullWorkspaces::test_named_and_auto_culled_default_kept, test_named_workspace_culled, test_cli_path_culls_named_keeps_default; tests/test_functional.py::test_named_workspaces_culled_default_kept (real server: auto-q and probe deleted, default and a 1-day-old shot kept)
+  - related: DEF-WSPACE-23 - the defect this closes
+  - test: list one named and one auto-0 workspace past the timeout, assert both are deleted
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-09-24T13:23:08Z @kj added
+  - log: 2026-09-24T14:22:46Z @kj closed: verified
+- [x] `ACC-WSPACE-41` **Edge: restart before settings arrive** - HIGH; after a server restart no workspace is culled by the periodic pass until a page has POSTed the user's settings; the built-in defaults never delete a workspace
+  - evidence: tests/test_culler.py::TestCullWorkspaces::test_workspaces_wait_for_the_users_settings; the functional workspace tests POST settings before the pass; 97 pytest green
+  - related: DEF-WSPACE-24 - the defect this closes
+  - test: idle named workspace, run a pass before any settings POST, assert it is kept; POST settings, run again, assert it is deleted
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-09-24T14:22:46Z @kj added
+  - log: 2026-09-24T14:22:46Z @kj closed: verified
 
 ## Kernel culling `KERN`
 
@@ -203,6 +240,13 @@ how settings reach the server and which values it accepts
   - test-tags: UNIT
   - log: 2026-09-03T15:59:10Z @kj added
   - log: 2026-09-03T15:59:10Z @kj closed
+- [x] `ACC-CONFIG-38` **Idle defaults** - HIGH; `terminalCullIdleTimeout` defaults to 60 minutes, `terminalCullMaxIdleTimeout` and `workspaceCullIdleTimeout` to 10080 minutes (7 days), the same in the schema and on a fresh server; all three are editable in Settings
+  - evidence: tests/test_culler.py::TestDefaultSettings::test_schema_defaults_match_server_defaults and test_default_terminal_settings; Playwright ui-tests: Settings Editor shows 10080 / 60 / 10080, and a changed maximum reaches the server status route (3 passed)
+  - test: read the three defaults from schema/plugin.json and from a new ResourceCuller, assert 60, 10080, 10080
+  - test-tags: UNIT, E2E
+  - log: 2026-09-24T13:23:20Z @kj added
+  - log: 2026-09-24T14:22:47Z @kj edited test-tags "UNIT, FUNCTIONAL" -> "UNIT, E2E"
+  - log: 2026-09-24T14:22:47Z @kj closed: verified
 
 ## Command line `CLI`
 
@@ -238,3 +282,16 @@ the `culler` command: server resolution, and what it does when it cannot see the
   - test-tags: UNIT
   - log: 2026-09-03T15:59:11Z @kj added
   - log: 2026-09-03T15:59:11Z @kj closed
+- [x] `ACC-CLI-39` **Culled means removed** - HIGH; `culler cull` prints a terminal as culled only when the server removed it from its registry; one still registered after the attempt is printed as failed
+  - evidence: tests/test_functional.py::test_cli_reports_defunct_terminal_removed, tests/test_cli.py::TestTerminateReportsRemoval (removed:false and HTTP errors print failed), tests/test_culler.py::TestCullTerminalOnRequest
+  - related: DEF-CLI-22 - the defect this closes
+  - test: orphan process holding a terminal pty after its shell exits, run cull, assert the terminal is gone and printed culled; a terminal that stays is printed failed
+  - test-tags: UNIT, FUNCTIONAL
+  - log: 2026-09-24T13:23:20Z @kj added
+  - log: 2026-09-24T14:22:47Z @kj closed: verified
+- [x] `ACC-CLI-40` **Protected label from the server** - MEDIUM; `culler list` marks a workspace protected exactly when the server's cull rule exempts it, so only `default` is marked
+  - evidence: tests/test_cli.py::TestListProtectedLabel::test_only_server_protected_workspaces_marked, tests/test_culler.py::TestCullWorkspaces::test_listing_marks_only_default_protected
+  - test: list default, one named and one auto workspace, assert only default is marked protected
+  - test-tags: UNIT
+  - log: 2026-09-24T13:23:20Z @kj added
+  - log: 2026-09-24T14:22:47Z @kj closed: verified

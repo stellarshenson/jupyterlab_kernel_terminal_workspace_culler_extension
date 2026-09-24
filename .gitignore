@@ -127,3 +127,6 @@ dmypy.json
 
 # Yarn cache
 .yarn/
+
+# local tool output (graphify code graph)
+tmp/
