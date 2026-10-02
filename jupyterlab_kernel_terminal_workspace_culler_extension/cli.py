@@ -10,6 +10,12 @@ from urllib.parse import urljoin
 
 import requests
 
+# Next step printed with every "culler extension unavailable" error
+EXTENSION_HINT = (
+    "Run `jupyter server extension list` on the server: "
+    "jupyterlab_kernel_terminal_workspace_culler_extension must be enabled."
+)
+
 
 def get_jupyter_server_info() -> tuple[str, str | None]:
     """
@@ -386,7 +392,7 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
         # from disconnected ones, and culling blind would kill connected terminals
         print(
             "Error: cannot determine terminal connection status (culler extension "
-            "unavailable); skipping terminal culling.",
+            f"unavailable); skipping terminal culling. {EXTENSION_HINT}",
             file=sys.stderr,
         )
         exit_code = 1
@@ -407,7 +413,7 @@ def cmd_cull(client: JupyterClient, args: argparse.Namespace) -> int:
     workspaces_culled = client.cull_workspaces(args.workspace_timeout, args.dry_run)
     if workspaces_culled is None:
         print(
-            "Error: cannot cull workspaces (culler extension unavailable).",
+            f"Error: cannot cull workspaces (culler extension unavailable). {EXTENSION_HINT}",
             file=sys.stderr,
         )
         exit_code = 1
@@ -452,11 +458,29 @@ def main(argv: list[str] | None = None) -> int:
         description="List and cull idle Jupyter kernels, terminals, and workspaces.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Environment variables:
-  JUPYTER_SERVER_URL    Jupyter server URL (e.g., http://localhost:8888/)
-  JUPYTER_TOKEN         Jupyter server authentication token
+server and token:
+  The server is --server-url, else JUPYTER_SERVER_URL, else the first server
+  that `jupyter server list` prints (a warning on stderr when it prints
+  several), else http://localhost:8888 as changed by the last two variables
+  below.
+  The token is --token, else the first token variable below that is set, else
+  the token of the server that `jupyter server list` printed.
 
-Examples:
+environment variables:
+  JUPYTER_SERVER_URL         server URL, e.g. http://localhost:8888/
+  JUPYTERHUB_API_TOKEN       token; read before the two below
+  JPY_API_TOKEN              token; read before JUPYTER_TOKEN
+  JUPYTER_TOKEN              token
+  JUPYTERHUB_SERVICE_PREFIX  path of the server, used when `jupyter server list` prints none
+  JUPYTER_PORT               port of the server (default 8888), used in the same case
+
+exit codes:
+  0  the command ran; `cull` also exits 0 when the action of a row is `failed`
+  1  the server did not answer or answered with an HTTP error, or `cull` got
+     no answer from the culler extension
+  2  wrong arguments
+
+examples:
   %(prog)s list                       List all resources and idle times
   %(prog)s list --json                List as JSON
   %(prog)s cull --dry-run             Show what would be culled
@@ -468,23 +492,87 @@ Examples:
     )
 
     parser.add_argument("--server-url", help="Jupyter server URL (overrides JUPYTER_SERVER_URL)")
-    parser.add_argument("--token", help="Jupyter server token (overrides JUPYTER_TOKEN)")
+    parser.add_argument("--token", help="Jupyter server token (overrides the token variables)")
 
     subparsers = parser.add_subparsers(dest="command", title="commands")
 
     # list command
-    list_parser = subparsers.add_parser("list", help="List all resources and their idle times")
+    list_parser = subparsers.add_parser(
+        "list",
+        help="List all resources and their idle times",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""
+Print the Resource Culler settings in effect on the server, then every kernel,
+terminal and workspace with the time since its last activity. Changes nothing.
+
+A terminal reads `connected` when it has an open browser tab or a workspace
+references it; `cull` skips those. A workspace marked `(protected)` is never
+culled.
+
+--json prints one object:
+  kernels     id, name, execution_state, last_activity, idle_seconds, idle_time
+  terminals   name, last_activity, idle_seconds, idle_time, connected
+  workspaces  id, last_modified, created, protected, idle_seconds, idle_time
+  culler      running, settings
+idle_seconds is -1 when the last activity is unknown. `connected`, `workspaces`
+and `culler` are null when the culler extension does not answer; the text
+output says so in their place.
+""",
+        epilog="""
+examples:
+  %(prog)s          # settings, kernels, terminals, workspaces as text
+  %(prog)s --json   # the same as one JSON object
+""",
+    )
     list_parser.add_argument("--json", action="store_true", help="Output as JSON")
     list_parser.set_defaults(func=cmd_list)
 
     # cull command
-    cull_parser = subparsers.add_parser("cull", help="Cull idle resources")
+    cull_parser = subparsers.add_parser(
+        "cull",
+        help="Cull idle resources",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""
+Shut down kernels, terminate terminals and delete workspaces that have been
+idle longer than the timeouts below. This cannot be undone: a kernel loses its
+variables, the shell of a terminal is killed, the saved layout of a workspace
+is deleted. Run with --dry-run first.
+
+Every run acts on all three kinds. To leave one kind alone, give it a timeout
+longer than any idle time that `list` prints. The timeouts are these flags and
+their defaults, not the Resource Culler settings of JupyterLab; `list` prints
+those.
+
+Never culled: a kernel whose state is busy, the workspace named default, and -
+without --include-connected - a terminal with an open browser tab or a
+workspace reference.
+
+Prints one row per resource with its action: `culled`, `failed` (the server
+did not remove it) or, with --dry-run, `would_cull`. A `failed` row leaves the
+exit code at 0, so read the action of every row. When the culler extension
+does not answer, no terminal and no workspace is culled, kernels still are,
+and the exit code is 1.
+
+--json prints one object:
+  kernels_culled     id, idle_time, action
+  terminals_culled   name, idle_time, action
+  workspaces_culled  id, idle_time, action
+  dry_run            true or false
+""",
+        epilog="""
+examples:
+  %(prog)s --dry-run                    # what the default timeouts would cull
+  %(prog)s --dry-run --json             # the same as one JSON object
+  %(prog)s --kernel-timeout 30          # kernels idle over 30 minutes; terminals and workspaces at the defaults
+  %(prog)s --workspace-timeout 1440     # workspaces idle over 1 day; kernels and terminals at the defaults
+""",
+    )
     cull_parser.add_argument("--json", action="store_true", help="Output as JSON")
-    cull_parser.add_argument("--dry-run", action="store_true", help="Simulate culling without actually terminating")
+    cull_parser.add_argument("--dry-run", action="store_true", help="Print what would be culled; cull nothing")
     cull_parser.add_argument("--kernel-timeout", type=int, default=60, metavar="MIN", help="Kernel idle timeout in minutes (default: 60)")
     cull_parser.add_argument("--terminal-timeout", type=int, default=60, metavar="MIN", help="Terminal idle timeout in minutes (default: 60)")
     cull_parser.add_argument("--include-connected", action="store_true", help="Also cull terminals with an open browser tab or referenced by a workspace (default: skip protected terminals)")
-    cull_parser.add_argument("--workspace-timeout", type=int, default=10080, metavar="MIN", help="Workspace idle timeout in minutes (default: 10080 = 7 days)")
+    cull_parser.add_argument("--workspace-timeout", type=int, default=10080, metavar="MIN", help="Workspace idle timeout in minutes, 1 or more (default: 10080 = 7 days)")
     cull_parser.set_defaults(func=cmd_cull)
 
     args = parser.parse_args(argv)
@@ -502,10 +590,16 @@ Examples:
     try:
         return args.func(client, args)
     except requests.exceptions.ConnectionError:
-        print(f"Error: Cannot connect to Jupyter server at {server_url}", file=sys.stderr)
+        print(
+            f"Error: Cannot connect to Jupyter server at {server_url}. "
+            "Pass --server-url or set JUPYTER_SERVER_URL.",
+            file=sys.stderr,
+        )
         return 1
     except requests.exceptions.HTTPError as e:
         print(f"Error: {e}", file=sys.stderr)
+        if e.response is not None and e.response.status_code in (401, 403):
+            print("Pass --token or set JUPYTER_TOKEN.", file=sys.stderr)
         return 1
 
 

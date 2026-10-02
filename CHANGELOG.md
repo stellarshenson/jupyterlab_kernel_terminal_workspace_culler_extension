@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.28] - 2026-10-02
+
+### Added
+
+- Agent skill for the CLI in `.agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension/SKILL.md`; the wheel installs it to `share/jupyter/agents/skills/`, and the README gives the two commands that link it for an AI assistant
+
+### Changed
+
+- `--help` of the CLI states how the server and token are found, the six environment variables it reads and the exit codes; `list --help` and `cull --help` describe the output and the `--json` fields, and give examples
+- CLI error messages name the next step: `--server-url` or `JUPYTER_SERVER_URL` on a connection error, `--token` or `JUPYTER_TOKEN` on HTTP 401 or 403, `jupyter server extension list` when the culler extension does not answer
+
 ## [1.0.26] - 2026-09-24
 
 ### Added

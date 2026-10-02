@@ -1,15 +1,20 @@
 """Unit tests for the CLI culling logic."""
 
 import argparse
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests
 
+from jupyterlab_kernel_terminal_workspace_culler_extension import cli
 from jupyterlab_kernel_terminal_workspace_culler_extension.cli import (
     JupyterClient,
     cmd_cull,
     cmd_list,
+    main,
     resolve_server_url_and_token,
 )
 
@@ -152,6 +157,62 @@ class TestListProtectedLabel:
         assert "(protected)" in lines["default"]
         assert "(protected)" not in lines["auto-0"]
         assert "(protected)" not in lines["probe"]
+
+
+class TestHelpForAgents:
+    """An agent runs every command from --help alone; the skill only points at it."""
+
+    @pytest.fixture(autouse=True)
+    def _plain_help(self, monkeypatch):
+        # Python 3.14 argparse colours the help when FORCE_COLOR is set
+        monkeypatch.setenv("PYTHON_COLORS", "0")
+
+    @staticmethod
+    def _help(capsys, *argv) -> str:
+        with pytest.raises(SystemExit) as exit_info:
+            main([*argv, "--help"])
+        assert exit_info.value.code == 0
+        return capsys.readouterr().out
+
+    def test_top_level_names_every_environment_variable_the_cli_reads(self, capsys):
+        read = set(re.findall(r'os\.environ\.get\("(\w+)"', Path(cli.__file__).read_text()))
+        text = self._help(capsys)
+
+        assert read
+        assert not [name for name in read if name not in text]
+
+    def test_top_level_states_the_exit_codes(self, capsys):
+        text = self._help(capsys)
+
+        assert "exit codes:" in text
+        assert "`failed`" in text.split("exit codes:")[1]
+
+    @pytest.mark.parametrize("command", ["list", "cull"])
+    def test_command_describes_its_output_and_gives_examples(self, capsys, command):
+        text = self._help(capsys, command)
+
+        assert "--json prints one object:" in text
+        assert f"jupyterlab_kernel_terminal_workspace_culler {command} --" in text.split("examples:")[1]
+
+    def test_cull_says_it_cannot_be_undone(self, capsys):
+        assert "cannot be undone" in self._help(capsys, "cull")
+
+    def test_connection_error_names_the_next_step(self, capsys):
+        with patch.object(
+            JupyterClient, "list_kernels", side_effect=requests.exceptions.ConnectionError
+        ):
+            rc = main(["--server-url", "http://127.0.0.1:1/", "list"])
+
+        assert rc == 1
+        assert "--server-url" in capsys.readouterr().err
+
+    def test_unavailable_extension_names_the_next_step(self, capsys):
+        client = _client([_idle_terminal("1", 120)], connection=None)
+        client.cull_workspaces.return_value = None
+
+        cmd_cull(client, _args())
+
+        assert capsys.readouterr().err.count("jupyter server extension list") == 2
 
 
 class TestServerResolution:

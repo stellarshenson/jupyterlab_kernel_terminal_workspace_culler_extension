@@ -151,6 +151,18 @@ The CLI auto-discovers running Jupyter servers. You can also set environment var
 - `JUPYTER_SERVER_URL` - server URL (e.g., `http://localhost:8888/`)
 - `JUPYTER_TOKEN` - authentication token
 
+### Agent skill
+
+The package ships a skill that tells an AI assistant how to use the CLI: `.agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension/SKILL.md`. `pip install` copies it to `<sys.prefix>/share/jupyter/agents/skills/`, a directory no assistant reads, so link it once.
+
+```bash
+# After pip install, with the Python that runs JupyterLab
+mkdir -p ~/.agents/skills && ln -s "$(python -c 'import sys; print(sys.prefix)')/share/jupyter/agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension" ~/.agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension
+
+# From a clone of this repository
+ln -s "$PWD/.agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension" ~/.claude/skills/jupyterlab-kernel-terminal-workspace-culler-extension
+```
+
 ## Uninstall
 
 ```bash
