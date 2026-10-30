@@ -183,10 +183,10 @@ async function reportActiveTerminals(tracker: ITerminalTracker): Promise<void> {
 }
 
 /**
- * Initialization data for the jupyterlab_kernel_terminal_workspace_culler_extension extension.
+ * Initialization data for the @stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension extension.
  */
 const plugin: JupyterFrontEndPlugin<void> = {
-  id: 'jupyterlab_kernel_terminal_workspace_culler_extension:plugin',
+  id: '@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension:plugin',
   description:
     'JupyterLab extension to automatically cull idle kernels, terminals, and workspaces.',
   autoStart: true,
@@ -197,7 +197,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     terminalTracker: ITerminalTracker | null
   ) => {
     console.log(
-      'JupyterLab extension jupyterlab_kernel_terminal_workspace_culler_extension is activated!'
+      'JupyterLab extension @stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension is activated!'
     );
 
     if (settingRegistry) {

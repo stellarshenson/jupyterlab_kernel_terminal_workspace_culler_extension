@@ -1448,18 +1448,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@playwright/test@npm:1.63.0":
-  version: 1.63.0
-  resolution: "@playwright/test@npm:1.63.0"
-  dependencies:
-    playwright: 1.63.0
-  bin:
-    playwright: cli.js
-  checksum: ed4a641d14f9d2f6740a86a36602e33aa7fef2287fb8f3a02112cd881812a3431ede800db0e5ba74fff9fdd65071cdc1af50a3e6677e62295f41f82dcca01e0a
-  languageName: node
-  linkType: hard
-
-"@playwright/test@npm:^1.60.0":
+"@playwright/test@npm:^1.60.0, @playwright/test@npm:^1.64.0":
   version: 1.64.1
   resolution: "@playwright/test@npm:1.64.1"
   dependencies:
@@ -1903,6 +1892,15 @@ __metadata:
   conditions: (os=aix | os=darwin | os=freebsd | os=linux | os=macos | os=openbsd | os=sunos | os=win32 | os=windows)
   languageName: node
   linkType: hard
+
+"@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension-ui-tests@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension-ui-tests@workspace:."
+  dependencies:
+    "@jupyterlab/galata": ^5.6.3
+    "@playwright/test": ^1.64.0
+  languageName: unknown
+  linkType: soft
 
 "@types/d3-array@npm:*":
   version: 3.2.2
@@ -3158,15 +3156,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jupyterlab_kernel_terminal_workspace_culler_extension-ui-tests@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "jupyterlab_kernel_terminal_workspace_culler_extension-ui-tests@workspace:."
-  dependencies:
-    "@jupyterlab/galata": ^5.6.3
-    "@playwright/test": 1.63.0
-  languageName: unknown
-  linkType: soft
-
 "katex@npm:^0.16.47":
   version: 0.16.47
   resolution: "katex@npm:0.16.47"
@@ -3420,32 +3409,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright-core@npm:1.63.0":
-  version: 1.63.0
-  resolution: "playwright-core@npm:1.63.0"
-  bin:
-    playwright-core: cli.js
-  checksum: b4c190c4099d0620a9ba22a0e826194ad511c3149153a79c44dc632ac2058da7da01cf66f011ee3ee0f360bbd83aa2f67f04519eb3c7c2bea257c4f598537937
-  languageName: node
-  linkType: hard
-
 "playwright-core@npm:1.64.1":
   version: 1.64.1
   resolution: "playwright-core@npm:1.64.1"
   bin:
     playwright-core: cli.js
   checksum: 614007bcdeaad5c6ff46465b623a81e0dbcae060f04022ba37e325d10c2eb618a9b70c44da2eb7b0857c80f83fca6db73c53f0600dcdf1d922c7942af1e0b701
-  languageName: node
-  linkType: hard
-
-"playwright@npm:1.63.0":
-  version: 1.63.0
-  resolution: "playwright@npm:1.63.0"
-  dependencies:
-    playwright-core: 1.63.0
-  bin:
-    playwright: cli.js
-  checksum: 6f90bca3d61f509667b9fdc4ef9c845833e4cb3cbb1c0d4e26672efb66b97b7f7db47d6a947a66772a23c191859639a6db0211c7753e6a1a5bc42293fd226c5a
   languageName: node
   linkType: hard
 

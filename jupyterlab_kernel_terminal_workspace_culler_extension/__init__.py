@@ -24,7 +24,7 @@ def get_culler() -> ResourceCuller | None:
 
 
 def _jupyter_labextension_paths():
-    return [{"src": "labextension", "dest": "jupyterlab_kernel_terminal_workspace_culler_extension"}]
+    return [{"src": "labextension", "dest": "@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension"}]
 
 
 def _jupyter_server_extension_points():

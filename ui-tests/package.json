@@ -1,7 +1,7 @@
 {
-  "name": "jupyterlab_kernel_terminal_workspace_culler_extension-ui-tests",
+  "name": "@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension-ui-tests",
   "version": "1.0.0",
-  "description": "JupyterLab jupyterlab_kernel_terminal_workspace_culler_extension Integration Tests",
+  "description": "JupyterLab @stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension Integration Tests",
   "private": true,
   "scripts": {
     "start": "jupyter lab --config jupyter_server_test_config.py",
@@ -10,6 +10,6 @@
   },
   "devDependencies": {
     "@jupyterlab/galata": "^5.6.3",
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "^1.64.0"
   }
 }

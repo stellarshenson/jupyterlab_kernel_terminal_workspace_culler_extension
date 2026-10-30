@@ -1,7 +1,7 @@
 # jupyterlab_kernel_terminal_workspace_culler_extension
 
 [![GitHub Actions](https://github.com/stellarshenson/jupyterlab_kernel_terminal_workspace_culler_extension/actions/workflows/build.yml/badge.svg)](https://github.com/stellarshenson/jupyterlab_kernel_terminal_workspace_culler_extension/actions/workflows/build.yml)
-[![npm version](https://img.shields.io/npm/v/jupyterlab_kernel_terminal_workspace_culler_extension.svg)](https://www.npmjs.com/package/jupyterlab_kernel_terminal_workspace_culler_extension)
+[![npm version](https://img.shields.io/npm/v/@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension.svg)](https://www.npmjs.com/package/@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension)
 [![PyPI version](https://img.shields.io/pypi/v/jupyterlab-kernel-terminal-workspace-culler-extension.svg)](https://pypi.org/project/jupyterlab-kernel-terminal-workspace-culler-extension/)
 [![Total PyPI downloads](https://static.pepy.tech/badge/jupyterlab-kernel-terminal-workspace-culler-extension)](https://pepy.tech/project/jupyterlab-kernel-terminal-workspace-culler-extension)
 [![JupyterLab 4](https://img.shields.io/badge/JupyterLab-4-orange.svg)](https://jupyterlab.readthedocs.io/en/stable/)

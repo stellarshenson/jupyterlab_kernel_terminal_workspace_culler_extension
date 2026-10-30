@@ -27,7 +27,13 @@ _BUILD = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), _PACKAGE, "labextension"
 )
 _LABEXTENSIONS = tempfile.mkdtemp(prefix="culler-labextensions-")
-shutil.copytree(_BUILD, os.path.join(_LABEXTENSIONS, _PACKAGE))
+shutil.copytree(
+    _BUILD,
+    os.path.join(
+        _LABEXTENSIONS,
+        "@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension",
+    ),
+)
 c.LabServerApp.labextensions_path = [
     _LABEXTENSIONS,
     os.path.dirname(os.path.abspath(jupyterlab.galata.__file__)),

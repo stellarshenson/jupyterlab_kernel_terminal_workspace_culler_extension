@@ -1,7 +1,7 @@
 import { expect, test } from '@jupyterlab/galata';
 
 const PLUGIN_ID =
-  'jupyterlab_kernel_terminal_workspace_culler_extension:plugin';
+  '@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension:plugin';
 const STATUS_URL =
   '/jupyterlab-kernel-terminal-workspace-culler-extension/status';
 
@@ -25,7 +25,7 @@ test.describe('activation', () => {
       logs.filter(
         s =>
           s ===
-          'JupyterLab extension jupyterlab_kernel_terminal_workspace_culler_extension is activated!'
+          'JupyterLab extension @stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension is activated!'
       )
     ).toHaveLength(1);
   });

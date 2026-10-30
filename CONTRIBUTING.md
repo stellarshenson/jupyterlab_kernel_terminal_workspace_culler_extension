@@ -57,7 +57,7 @@ pip uninstall jupyterlab_kernel_terminal_workspace_culler_extension
 
 In development mode, you will also need to remove the symlink created by `jupyter-builder develop`
 command. To find its location, you can run `jupyter labextension list` to figure out where the `labextensions`
-folder is located. Then you can remove the symlink named `jupyterlab_kernel_terminal_workspace_culler_extension` within that folder.
+folder is located. Then you can remove the symlink named `@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension` within that folder.
 
 ## Endpoint authentication
 

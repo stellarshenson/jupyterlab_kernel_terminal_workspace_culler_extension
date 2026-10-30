@@ -59,8 +59,8 @@ artifacts = ["jupyterlab_kernel_terminal_workspace_culler_extension/labextension
 exclude = [".github", "binder"]
 
 [tool.hatch.build.targets.wheel.shared-data]
-"jupyterlab_kernel_terminal_workspace_culler_extension/labextension" = "share/jupyter/labextensions/jupyterlab_kernel_terminal_workspace_culler_extension"
-"install.json" = "share/jupyter/labextensions/jupyterlab_kernel_terminal_workspace_culler_extension/install.json"
+"jupyterlab_kernel_terminal_workspace_culler_extension/labextension" = "share/jupyter/labextensions/@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension"
+"install.json" = "share/jupyter/labextensions/@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension/install.json"
 "jupyter-config/server-config" = "etc/jupyter/jupyter_server_config.d"
 ".agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension" = "share/jupyter/agents/skills/jupyterlab-kernel-terminal-workspace-culler-extension"
 

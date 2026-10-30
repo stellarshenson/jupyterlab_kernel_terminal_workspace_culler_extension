@@ -8,7 +8,7 @@ has_ai_rules: false
 has_binder: false
 has_settings: true
 kind: frontend-and-server
-labextension_name: jupyterlab_kernel_terminal_workspace_culler_extension
+labextension_name: '@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension'
 project_short_description: Jupyterlab extension to kill unused kernels, terminals
     and workspaces. User can configure the idle time (minutes) after which the resource
     will be released automatically. This helps with the locked memory, insane number
