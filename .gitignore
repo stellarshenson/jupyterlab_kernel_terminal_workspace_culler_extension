@@ -130,3 +130,7 @@ dmypy.json
 
 # local tool output (graphify code graph)
 tmp/
+
+# Run output
+logs/
+junit.xml

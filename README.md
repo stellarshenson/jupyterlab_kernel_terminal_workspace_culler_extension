@@ -49,7 +49,7 @@ Automatically cull idle kernels, terminals, and workspaces after configurable ti
 
 ## Installation
 
-Requires JupyterLab 4.0.0 or higher.
+Requires JupyterLab 4.6.0 or higher.
 
 ```bash
 pip install jupyterlab-kernel-terminal-workspace-culler-extension

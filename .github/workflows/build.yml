@@ -20,9 +20,11 @@ jobs:
 
     - name: Base Setup
       uses: jupyterlab/maintainer-tools/.github/actions/base-setup@v1
+      with:
+        python_version: '3.13'
 
     - name: Install dependencies
-      run: python -m pip install -U "jupyterlab>=4.0.0,<5"
+      run: python -m pip install -U "jupyterlab>=4.6,<5"
 
     - name: Build the extension
       run: |
@@ -35,6 +37,11 @@ jobs:
         jupyter labextension list
         jupyter labextension list 2>&1 | grep -ie "jupyterlab_kernel_terminal_workspace_culler_extension.*OK"
         python -m jupyterlab.browser_check
+
+    - name: Check that all endpoints are authenticated
+      run: |
+        set -eux
+        python .github/scripts/check_auth.py
 
     - name: Package the extension
       run: |
@@ -59,7 +66,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.13'
         architecture: 'x64'
     - uses: actions/download-artifact@v4
       with:
@@ -71,7 +78,7 @@ jobs:
         sudo rm -rf $(which node)
         sudo rm -rf $(which node)
 
-        pip install "jupyterlab>=4.0.0,<5" jupyterlab_kernel_terminal_workspace_culler_extension*.whl
+        pip install "jupyterlab>=4.6,<5" jupyterlab_kernel_terminal_workspace_culler_extension*.whl
 
         jupyter server extension list
         jupyter server extension list 2>&1 | grep -ie "jupyterlab_kernel_terminal_workspace_culler_extension.*OK"
@@ -79,6 +86,67 @@ jobs:
         jupyter labextension list
         jupyter labextension list 2>&1 | grep -ie "jupyterlab_kernel_terminal_workspace_culler_extension.*OK"
         python -m jupyterlab.browser_check --no-browser-test
+
+  integration-tests:
+    name: Integration tests
+    needs: build
+    runs-on: ubuntu-latest
+
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Base Setup
+      uses: jupyterlab/maintainer-tools/.github/actions/base-setup@v1
+      with:
+        python_version: '3.13'
+
+    - name: Download extension package
+      uses: actions/download-artifact@v4
+      with:
+        name: extension-artifacts
+
+    - name: Install the extension
+      run: |
+        set -eux
+        python -m pip install "jupyterlab>=4.6,<5" jupyterlab_kernel_terminal_workspace_culler_extension*.whl
+
+    - name: Install dependencies
+      working-directory: ui-tests
+      env:
+        YARN_ENABLE_IMMUTABLE_INSTALLS: 0
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+      run: jlpm install
+
+    - name: Set up browser cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/pw-browsers
+        key: ${{ runner.os }}-${{ hashFiles('ui-tests/yarn.lock') }}
+
+    - name: Install browser
+      run: |
+        set -eux
+        jlpm playwright install chromium --only-shell
+      working-directory: ui-tests
+
+    - name: Execute integration tests
+      working-directory: ui-tests
+      run: |
+        jlpm playwright test
+
+    - name: Upload Playwright Test report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: jupyterlab_kernel_terminal_workspace_culler_extension-playwright-tests
+        path: |
+          ui-tests/test-results
+          ui-tests/playwright-report
 
   check_links:
     runs-on: ubuntu-latest

@@ -8,3 +8,7 @@ jupyterlab_kernel_terminal_workspace_culler_extension
 # tracked by pm-tools, not prettier - reflowing breaks the item schema
 docs/defects.md
 docs/acc-crit.md
+eslint.config.mjs
+.venv
+.claude
+.agents
