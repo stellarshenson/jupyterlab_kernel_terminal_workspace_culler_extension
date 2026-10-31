@@ -80,6 +80,17 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.32] - 2026-10-31
+
+### Changed
+
+- Upgrade to extension template v4.6.5 and Makefile 1.46
+
+### Fixed
+
+- Serve the installed labextension in Galata when no working-tree build exists
+- Take the scoped @stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension npm name
+
 ## 1.0.2
 
 - First stable release
