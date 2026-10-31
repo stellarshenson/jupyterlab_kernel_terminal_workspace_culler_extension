@@ -12,3 +12,4 @@ eslint.config.mjs
 .venv
 .claude
 .agents
+package-lock.json

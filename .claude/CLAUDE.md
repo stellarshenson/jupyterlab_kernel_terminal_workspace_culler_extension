@@ -32,7 +32,7 @@ JupyterLab extension to automatically cull idle kernels, terminals, and workspac
 
 **Package Names**:
 
-- npm: `jupyterlab_kernel_terminal_workspace_culler_extension`
+- npm: `@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension`
 - PyPI: `jupyterlab-kernel-terminal-workspace-culler-extension`
 
 ## Strengthened Rules

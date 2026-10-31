@@ -14,6 +14,6 @@ project_short_description: Jupyterlab extension to kill unused kernels, terminal
     will be released automatically. This helps with the locked memory, insane number
     of terminals opened etc.
 python_name: jupyterlab_kernel_terminal_workspace_culler_extension
-repository: https://github.com/stellarshenson/jupyterlab_kernel_terminal_workspace_culler_extension.git
+repository: https://github.com/stellarshenson/jupyterlab_kernel_terminal_workspace_culler_extension
 test: true
 
