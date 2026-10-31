@@ -6,6 +6,7 @@ JavaScript objects through the global window variable.
 """
 import os
 import shutil
+import sys
 import tempfile
 
 import jupyterlab.galata
@@ -23,17 +24,15 @@ c.ServerApp.port = int(os.environ.get("JUPYTER_TEST_PORT") or "8888")
 # Federated extensions are looked up by directory name, so the build is copied
 # into a directory named after the package.
 _PACKAGE = "jupyterlab_kernel_terminal_workspace_culler_extension"
+_LABEXTENSION = "@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension"
 _BUILD = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), _PACKAGE, "labextension"
 )
+# The CI job installs the wheel and has no working-tree build.
+if not os.path.isdir(_BUILD):
+    _BUILD = os.path.join(sys.prefix, "share", "jupyter", "labextensions", _LABEXTENSION)
 _LABEXTENSIONS = tempfile.mkdtemp(prefix="culler-labextensions-")
-shutil.copytree(
-    _BUILD,
-    os.path.join(
-        _LABEXTENSIONS,
-        "@stellarshenson/jupyterlab-kernel-terminal-workspace-culler-extension",
-    ),
-)
+shutil.copytree(_BUILD, os.path.join(_LABEXTENSIONS, _LABEXTENSION))
 c.LabServerApp.labextensions_path = [
     _LABEXTENSIONS,
     os.path.dirname(os.path.abspath(jupyterlab.galata.__file__)),
