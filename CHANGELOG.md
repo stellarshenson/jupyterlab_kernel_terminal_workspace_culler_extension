@@ -80,6 +80,17 @@
 
 <!-- <START NEW CHANGELOG ENTRY> -->
 
+## [1.0.38] - 2026-11-13
+
+### Changed
+
+- Ignore the PayPal donate link in Check Links
+
+### Fixed
+
+- Re-send the settings to the server on every check interval
+- Show culling log lines in the server log and end CLI tracebacks
+
 ## [1.0.35] - 2026-10-31
 
 ### Changed
