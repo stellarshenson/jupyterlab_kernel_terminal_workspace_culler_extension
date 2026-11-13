@@ -601,6 +601,10 @@ examples:
         if e.response is not None and e.response.status_code in (401, 403):
             print("Pass --token or set JUPYTER_TOKEN.", file=sys.stderr)
         return 1
+    except requests.exceptions.RequestException as e:
+        # a URL with no scheme, a timeout, an answer that is not JSON
+        print(f"Error: {e}. Check --server-url ({server_url}).", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

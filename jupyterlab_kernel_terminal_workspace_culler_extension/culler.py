@@ -796,14 +796,14 @@ class ResourceCuller:
                 idle_minutes = idle_seconds / 60
 
                 if idle_seconds > timeout_seconds:
+                    # Format idle time for display
+                    if idle_seconds < 3600:
+                        idle_time = f"{idle_minutes:.1f}m"
+                    elif idle_seconds < 86400:
+                        idle_time = f"{idle_seconds / 3600:.1f}h"
+                    else:
+                        idle_time = f"{idle_seconds / 86400:.1f}d"
                     if dry_run:
-                        # Format idle time for display
-                        if idle_seconds < 3600:
-                            idle_time = f"{idle_minutes:.1f}m"
-                        elif idle_seconds < 86400:
-                            idle_time = f"{idle_seconds / 3600:.1f}h"
-                        else:
-                            idle_time = f"{idle_seconds / 86400:.1f}d"
                         result.append({
                             "id": workspace_id,
                             "idle_time": idle_time,
@@ -816,13 +816,6 @@ class ResourceCuller:
                         )
                         ws_mgr.delete(workspace_id)
                         logger.info(f"[Culler] Workspace {workspace_id} culled successfully")
-                        # Format idle time for display
-                        if idle_seconds < 3600:
-                            idle_time = f"{idle_minutes:.1f}m"
-                        elif idle_seconds < 86400:
-                            idle_time = f"{idle_seconds / 3600:.1f}h"
-                        else:
-                            idle_time = f"{idle_seconds / 86400:.1f}d"
                         result.append({
                             "id": workspace_id,
                             "idle_time": idle_time,

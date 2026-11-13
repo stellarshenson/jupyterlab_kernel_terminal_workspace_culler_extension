@@ -11,6 +11,8 @@ except ImportError:
     )
     __version__ = "dev"
 
+import logging
+
 from .culler import ResourceCuller
 from .routes import set_culler, setup_route_handlers
 
@@ -40,6 +42,10 @@ def _load_jupyter_server_extension(server_app):
         JupyterLab application instance
     """
     global _culler_instance
+
+    # culler.py logs through a module logger; without this its INFO lines reach
+    # no handler and --log-level=INFO shows no culling activity
+    logging.getLogger(__name__).parent = server_app.log
 
     # Set up route handlers
     setup_route_handlers(server_app.web_app)

@@ -206,6 +206,12 @@ class TestHelpForAgents:
         assert rc == 1
         assert "--server-url" in capsys.readouterr().err
 
+    def test_url_without_scheme_is_an_error_line(self, capsys):
+        rc = main(["--server-url", "localhost:1", "list"])
+
+        assert rc == 1
+        assert "--server-url" in capsys.readouterr().err
+
     def test_unavailable_extension_names_the_next_step(self, capsys):
         client = _client([_idle_terminal("1", 120)], connection=None)
         client.cull_workspaces.return_value = None

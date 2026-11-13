@@ -1,6 +1,7 @@
 """Integration tests for the resource culler route handlers."""
 
 import json
+import logging
 
 NAMESPACE = "jupyterlab-kernel-terminal-workspace-culler-extension"
 
@@ -133,3 +134,19 @@ async def test_settings_rejects_bad_type(jp_fetch):
     settings = json.loads(status.body)["settings"]
     assert settings["kernelCullEnabled"] is True
     assert settings["kernelCullIdleTimeout"] == 60
+
+
+async def test_culler_log_lines_reach_the_server_log(jp_serverapp):
+    # the README promises [Culler] lines in the server log
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    jp_serverapp.log.addHandler(handler)
+    try:
+        logging.getLogger(
+            "jupyterlab_kernel_terminal_workspace_culler_extension.culler"
+        ).warning("[Culler] probe")
+    finally:
+        jp_serverapp.log.removeHandler(handler)
+
+    assert [r.getMessage() for r in records] == ["[Culler] probe"]

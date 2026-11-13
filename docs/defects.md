@@ -83,6 +83,13 @@ workspace culling and the directory it reads, including the cascade that release
   - root-cause: 2026-09-24T14:22:33Z @kj settings live only in memory and arrive with the frontend's first POST; a page left open across a restart never re-sends them
   - log: 2026-09-24T14:22:33Z @kj added
   - log: 2026-09-24T14:22:33Z @kj closed: fixed: workspace culling in the periodic pass waits for the first valid settings POST (`_settings_received`); the CLI path is unaffected
+- [x] `DEF-WSPACE-27-IDLE-FORMAT` **Idle time formatted in two copies** - MINOR; `cull_workspaces_with_timeout` holds the same 7-line idle_time formatting in the dry-run branch and in the cull branch; a change to one leaves `cull --dry-run` and `cull` printing different values; `culler.py`
+  - evidence: idle_time computed once above the dry_run test; 107 pytest pass
+  - root-cause: 2026-11-13T07:02:33Z @kj the formatting was pasted into both branches of the dry_run test
+  - repro: read culler.py cull_workspaces_with_timeout
+  - test-tags: UNIT
+  - log: 2026-11-13T06:59:38Z @kj added
+  - log: 2026-11-13T07:02:33Z @kj closed
 
 ## Settings `CONFIG`
 
@@ -97,6 +104,10 @@ settings applied through the REST handlers and the values the server accepts
   - log: 2026-07-16T00:00:00Z @kj hardened: round 2 found JSON-valid non-object bodies (`5`, `[]`) 500-ing and `{"timeout": true}` on cull-workspaces computing a 60-second threshold that deleted every idle auto-\* workspace; all three POST handlers now require an object body and cull-workspaces validates timeout (int >= 1) and dry_run (bool) -> 400
   - log: 2026-07-16T00:00:00Z @kj hardened: round 3 found invalid UTF-8 bodies raising UnicodeDecodeError (a ValueError, not JSONDecodeError) -> 500 in two handlers; all three now catch it as 400
   - log: 2026-07-16T00:00:00Z @kj hardened: round 4 found pathologically nested JSON (`"["*200000`) raising RecursionError past the catch -> 500; added to the 400 tuple in all three handlers
+- [-] `DEF-CONFIG-28-GET-CULLER` **Unused get_culler in the package root** - MINOR; `__init__.get_culler` has no caller; `routes.get_culler` is the one in use; `__init__.py`
+  - repro: grep -rn get_culler --include=*.py .
+  - log: 2026-11-13T06:59:38Z @kj added
+  - log: 2026-11-13T07:02:39Z @kj rejected: importable from the package root, so removal could break an outside import; 3 unused lines harm no user
 
 ## CLI `CLI`
 
@@ -131,6 +142,13 @@ the `culler` command line: server discovery, authentication, and what it reports
   - log: 2026-09-24T14:22:33Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
   - log: 2026-09-24T14:22:33Z @kj fixed: new POST `cull-terminal` route runs the periodic cull's terminate, reap and registry check (`ResourceCuller.cull_terminal`); the CLI terminates through it and prints `failed` when the terminal stays registered; `routes.py`, `culler.py`, `cli.py`
   - log: 2026-09-24T14:22:33Z @kj closed: verified: 97 pytest green; five-lens adversarial review ended SHIP in round 5
+- [x] `DEF-CLI-25-URL-TRACEBACK` **CLI prints a traceback for a URL with no scheme** - MINOR; `--server-url localhost:8888`, a read timeout or a non-JSON answer ends in a Python traceback; `main` catches only ConnectionError and HTTPError; `cli.py`
+  - evidence: main catches RequestException last, prints one Error line naming --server-url, exit 1; test_url_without_scheme_is_an_error_line passes
+  - root-cause: 2026-11-13T07:02:33Z @kj main caught requests ConnectionError and HTTPError only; MissingSchema, ReadTimeout and JSONDecodeError are other RequestException subclasses
+  - repro: jupyterlab_kernel_terminal_workspace_culler --server-url localhost:8888 list
+  - test-tags: UNIT
+  - log: 2026-11-13T06:59:31Z @kj added
+  - log: 2026-11-13T07:02:33Z @kj closed
 
 ## Tests `TESTS`
 
@@ -139,3 +157,18 @@ the test suites themselves, when they drift from the behaviour they claim to cov
 - [x] `DEF-TESTS-8` **drifted test suite failed against current code** - MEDIUM; `test_culler.py` asserted removed session-culling settings and `test_routes.py` hit a non-existent `hello` endpoint (4+ failures); cause: tests never updated after the session->workspace redesign; fix: rewrote both suites to current behaviour and added DEF-1/2/4/5 coverage; `tests/test_culler.py`, `tests/test_routes.py`
   - log: 2026-07-15T00:00:00Z @kj reported: found while establishing the test baseline (4 failed, 15 passed)
   - log: 2026-07-15T00:00:00Z @kj fixed: 32 pytest tests green, including route integration tests
+
+## Logs `LOGS`
+
+the [Culler] lines the README promises in the server log
+
+- log: 2026-11-13T06:59:31Z @kj category created
+
+- [x] `DEF-LOGS-26-INFO-HIDDEN` **Culling log lines never shown** - MEDIUM; with `--log-level=INFO` the server log shows no `[Culler] CULLING ...` line; `culler.py` logs through a module logger that has no handler, so only WARNING and above reach stderr, unformatted
+  - evidence: package logger parented to server_app.log in _load_jupyter_server_extension; real server at --log-level=INFO prints '[Culler] Started with check interval'; test_culler_log_lines_reach_the_server_log passes
+  - root-cause: 2026-11-13T07:02:33Z @kj culler.py uses logging.getLogger(__name__); jupyter_server gives handlers only to the ServerApp logger, so the module logger falls to the root logger's last-resort handler, WARNING and above
+  - repro: jupyter server --log-level=INFO with the extension on; grep '\[Culler\] Started' in the output finds nothing
+  - test-tags: INTEGRATION
+  - log: 2026-11-13T06:59:31Z @kj added
+  - log: 2026-11-13T07:02:33Z @kj closed
+

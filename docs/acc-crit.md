@@ -295,3 +295,18 @@ the `culler` command: server resolution, and what it does when it cannot see the
   - test-tags: UNIT
   - log: 2026-09-24T13:23:20Z @kj added
   - log: 2026-09-24T14:22:47Z @kj closed: verified
+
+## Logs `LOGS`
+
+what the server log shows about culling
+
+- log: 2026-11-13T07:02:33Z @kj category created
+
+- [x] `ACC-LOGS-42-SERVER-LOG` **Culling lines in the server log** - MEDIUM; at `--log-level=INFO` every `[Culler]` line of culler.py is printed by the server's own log handlers
+  - evidence: test_culler_log_lines_reach_the_server_log passes; real server at --log-level=INFO prints '[Culler] Started with check interval'
+  - test: pytest -k test_culler_log_lines_reach_the_server_log
+  - test-tags: INTEGRATION
+  - mechanism: 2026-11-13T07:02:33Z @kj the package logger's parent is server_app.log, set when the server extension loads
+  - log: 2026-11-13T07:02:33Z @kj added
+  - log: 2026-11-13T07:02:39Z @kj closed
+
