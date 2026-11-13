@@ -108,6 +108,12 @@ settings applied through the REST handlers and the values the server accepts
   - repro: grep -rn get_culler --include=*.py .
   - log: 2026-11-13T06:59:38Z @kj added
   - log: 2026-11-13T07:02:39Z @kj rejected: importable from the package root, so removal could break an outside import; 3 unused lines harm no user
+- [x] `DEF-CONFIG-29-RESTART-RESYNC` **Settings lost after a server restart** - MEDIUM; after a server restart with a page left open, kernels and terminals are culled on the built-in defaults until the page reloads; `src/index.ts`
+  - evidence: the cull-results interval tick calls syncSettings before pollCullResults; build_test passed: Jest 1, pytest 107, Galata 3
+  - repro: set kernelCullIdleTimeout, restart the server, keep the page open, GET status after one check interval
+  - root-cause: 2026-11-13T07:26:50Z @kj the frontend POSTs settings only on page load and on a settings change; a restarted server holds its defaults
+  - log: 2026-11-13T07:26:50Z @kj added
+  - log: 2026-11-13T07:28:30Z @kj closed
 
 ## CLI `CLI`
 

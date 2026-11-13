@@ -52,7 +52,7 @@ async function syncSettings(
     console.log(
       `[Culler] Cull check interval changed to ${cullCheckIntervalMinutes} minutes`
     );
-    setupIntervals(app, terminalTracker);
+    setupIntervals(app, terminalTracker, settings);
   }
 }
 
@@ -62,7 +62,8 @@ async function syncSettings(
  */
 function setupIntervals(
   app: JupyterFrontEnd,
-  terminalTracker: ITerminalTracker | null
+  terminalTracker: ITerminalTracker | null,
+  settings?: ISettingRegistry.ISettings
 ): void {
   const intervalMs = cullCheckIntervalMinutes * 60 * 1000;
 
@@ -75,7 +76,13 @@ function setupIntervals(
   }
 
   // Set up cull results polling
-  cullResultsIntervalId = setInterval(() => pollCullResults(app), intervalMs);
+  cullResultsIntervalId = setInterval(() => {
+    // Re-send the settings: a restarted server holds only its defaults
+    if (settings) {
+      void syncSettings(settings, app, terminalTracker);
+    }
+    void pollCullResults(app);
+  }, intervalMs);
 
   // Set up terminal reporting (only if tracker is available)
   if (terminalTracker) {
@@ -215,7 +222,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           syncSettings(settings, app, terminalTracker);
 
           // Set up intervals with initial settings
-          setupIntervals(app, terminalTracker);
+          setupIntervals(app, terminalTracker, settings);
 
           // Re-sync on settings change
           settings.changed.connect(() =>
